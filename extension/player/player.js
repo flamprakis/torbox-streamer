@@ -30,19 +30,37 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  const btnVlc = document.getElementById("btn-vlc");
+
   btnMpv.addEventListener("click", async () => {
     if (!streamUrl) return;
     btnMpv.textContent = "Launching MPV...";
-    const resp = await browser.runtime.sendMessage({ type: "TRY_MPV", url: streamUrl });
+    const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: streamUrl });
     if (resp && resp.success) {
       btnMpv.textContent = "Launched in MPV!";
       video.pause();
     } else {
       btnMpv.textContent = "MPV helper not found";
-      alert("MPV helper script not installed or mpv binary missing. Run 'python3 helpers/install.py' to enable.");
+      alert("Helper script not installed or MPV binary missing. Run 'python3 helpers/install.py' to enable.");
     }
     setTimeout(() => btnMpv.textContent = "Try in MPV", 3000);
   });
+
+  if (btnVlc) {
+    btnVlc.addEventListener("click", async () => {
+      if (!streamUrl) return;
+      btnVlc.textContent = "Launching VLC...";
+      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: streamUrl });
+      if (resp && resp.success) {
+        btnVlc.textContent = "Launched in VLC!";
+        video.pause();
+      } else {
+        btnVlc.textContent = "VLC helper not found";
+        alert("Helper script not installed or VLC binary missing. Run 'python3 helpers/install.py' to enable.");
+      }
+      setTimeout(() => btnVlc.textContent = "Try in VLC", 3000);
+    });
+  }
 
   btnDelete.addEventListener("click", async () => {
     if (!torrentId) return;

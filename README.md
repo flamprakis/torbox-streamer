@@ -1,96 +1,124 @@
-# torbox-streamer v2.0
+# TorBox Streamer 🍿
 
-**IMDb → Torrentio → TorBox** — stream any movie or TV episode directly from IMDb pages in your browser or with MPV.
+[![Version](https://img.shields.io/badge/version-2.0.0-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Browser Support](https://img.shields.io/badge/browsers-Firefox%20%7C%20Waterfox%20%7C%20Chrome%20%7C%20Brave-orange.svg)](#installation)
+[![TorBox](https://img.shields.io/badge/service-TorBox.app-teal.svg)](https://torbox.app)
 
-Now a **pure, self-contained browser extension** (no mandatory local Python scripts or setup required for basic playback).
+**Stream movies & TV shows directly from IMDb pages using Torrentio + TorBox in your browser or with MPV / VLC.**
 
----
-
-## Features
-
-- 🦊 **Firefox Extension** — "Play Now" button injected directly on IMDb title pages
-- ⚡ **Instant Cached Playback** — checks TorBox server cache in parallel before playing
-- 🎬 **In-Browser Video Player** — custom dark-themed tab player for direct browser streaming (`.mp4`, `.webm`)
-- 🍿 **Optional MPV Launcher** — launch external MPV with one optional helper script
-- 📺 **Series & Season Support** — auto-matches episode files with S01E01 pattern detection
-- 🎛️ **Quality & Status Filters** — filter by 4K, 1080p, 720p, or Cached Only
-- 🧹 **TorBox Account Cleanup** — easily delete streams from your TorBox account when finished
-- 💻 **CLI Included** — separate standalone CLI available in `cli/`
+TorBox Streamer is a **pure, self-contained browser extension**. No complex servers or local Python background daemons required for standard browser playback!
 
 ---
 
-## Quick Start (Browser Extension)
+## ✨ Features
 
-### 1. Install Extension in Firefox
-1. Open Firefox and navigate to `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on...**
-3. Select the `extension/manifest.json` file in this repository
-
-### 2. Set Your API Key
-1. Go to `about:addons` → **TorBox Streamer** → **Options** (or right click icon → options)
-2. Enter your **TorBox API Key** (from [torbox.app/settings](https://torbox.app/settings)) and click **Save**.
-
-### 3. Stream from IMDb!
-1. Go to any IMDb page (e.g. [The Shawshank Redemption](https://www.imdb.com/title/tt0111161/))
-2. Click the yellow **Play Now** button in the header action bar
-3. Select a cached stream — it will open in the in-browser video player tab!
+- 🍿 **Direct IMDb Integration** — Injects a sleek **"Play Now"** button on movie and TV show IMDb pages.
+- ⚡ **Instant Cache Checking** — Queries TorBox cache in parallel to find instantly streamable torrents.
+- 🎬 **In-Browser Player Tab** — Built-in dark-themed HTML5 player tab for compatible videos (`.mp4`, `.webm`).
+- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch streams into **MPV** or **VLC** on Linux, macOS, or Windows with an optional 20-line helper.
+- 🎛️ **In-Modal Player Switcher** — Toggle between `Auto`, `Browser`, `MPV`, and `VLC` right inside the stream selection modal.
+- 📺 **Series Episode Matcher** — Automatically detects season/episode formats (`S01E01`, `1x01`) and picks the matching file.
+- 🧹 **File & Account Management** — Automatic trash/`.nfo` file filtering, and 1-click torrent deletion from TorBox when done.
+- 💻 **Standalone CLI Included** — Terminal enthusiasts can also stream directly using the included `cli/` tool.
 
 ---
 
-## Optional: Launch in MPV Player
+## 🚀 Quick Start Guide
 
-If you prefer external MPV playback for high-bitrate MKV files or surround audio:
+### Option A: Install from GitHub Release (Recommended)
 
-1. Ensure `mpv` and `python3` are installed on your system.
-2. Run the one-time helper installer:
+1. Download `torbox-streamer-v2.0.0.zip` from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
+2. Open your browser's extension debugging page:
+   - **Firefox / Waterfox / LibreWolf**: Navigate to `about:debugging#/runtime/this-firefox` → Click **Load Temporary Add-on...** → Select the `.zip` file (or `manifest.json`).
+   - **Chrome / Brave / Chromium**: Navigate to `chrome://extensions` → Enable **Developer mode** → Click **Load unpacked** → Select the `extension/` folder.
+
+### Option B: Load Source Code directly
+
+```bash
+git clone https://github.com/flamprakis/torbox-streamer.git
+```
+Then load the `extension/` directory in your browser's Developer / Debugging page.
+
+---
+
+## ⚙️ Configuration (API Key)
+
+1. Get your free API Key from your [TorBox.app Settings](https://torbox.app/settings).
+2. Right-click the **TorBox Streamer** extension icon → **Options** (or open options from your browser's extension settings).
+3. Paste your **TorBox API Key** and click **Save**.
+
+---
+
+## 🍿 Optional: Enable MPV / VLC External Launching
+
+If you want high-bitrate `.mkv` files, surround sound, or HDR to launch directly into **MPV** or **VLC**:
+
+1. Ensure **MPV** or **VLC** and **Python 3** are installed on your computer.
+2. Run the one-command native helper installer script:
    ```bash
    python3 helpers/install.py
    ```
-3. In Extension Options, set **Preferred Player** to `Always MPV` (or leave as `Auto`).
+   *This automatically registers the helper for Firefox, Waterfox, LibreWolf, Chrome, Brave, and Chromium on Linux, macOS, and Windows.*
+
+3. Now, when selecting a stream on IMDb, choose **MPV** or **VLC** from the modal player bar, or set your preference in Extension Options!
 
 ---
 
-## Project Structure
+## 🖥️ Player Mode Comparison
+
+| Mode | Format Support | External Player | Notes |
+| :--- | :--- | :--- | :--- |
+| **Browser Tab** 🎬 | `.mp4`, `.webm`, `.mov` | None (In-Browser) | Zero setup required. Dark custom tab player. |
+| **MPV** 🍿 | All formats (`.mkv`, `.avi`, HDR, etc.) | MPV Player | Requires running `helpers/install.py` once. |
+| **VLC** 🟧 | All formats (`.mkv`, `.avi`, multi-audio) | VLC Media Player | Great for Windows users. Requires `helpers/install.py`. |
+| **Auto** ⚡ | Dynamic | Auto-selects | Uses Browser Tab for `.mp4` and MPV/VLC for `.mkv`. |
+
+---
+
+## 📁 Repository Structure
 
 ```
 torbox-streamer/
 ├── extension/                  # Pure Browser Extension (v2.0)
 │   ├── manifest.json
-│   ├── background.js           # Main background worker & stream router
-│   ├── torbox_api.js           # TorBox API client in JavaScript
+│   ├── background.js           # Background worker & stream router
+│   ├── torbox_api.js           # TorBox JS client & auto file picker
 │   ├── content.js              # IMDb page injection & stream picker UI
-│   ├── options/                # Extension settings page
+│   ├── options/                # Extension settings UI
 │   └── player/                 # Internal tab video player
-├── helpers/                    # Optional MPV Launcher Helper
-│   ├── install.py              # One-line installer script for Firefox
-│   └── mpv_host.py             # Minimal native host bridge (20 lines)
-├── cli/                        # Standalone CLI Tool
+├── helpers/                    # Optional MPV / VLC Launcher Helper
+│   ├── install.py              # Cross-browser native host installer
+│   └── mpv_host.py             # Lightweight native player bridge
+├── cli/                        # Standalone Terminal CLI Tool
 │   ├── cli.py                  # Stream directly from terminal
 │   ├── torbox_client.py
 │   └── config.py
-└── legacy/                     # v1 Python Native Messaging Host (archived)
+├── package.py                  # Automated extension release builder
+└── .github/workflows/          # GitHub Actions CI release workflow
 ```
 
 ---
 
-## CLI Usage (Standalone)
+## ❓ Troubleshooting & FAQ
 
-The CLI tool remains fully functional in the `cli/` directory:
+<details>
+<summary><b>The "Open Settings" button or Play Now doesn't do anything</b></summary>
+Ensure you have saved a valid TorBox API key in the extension options page.
+</details>
 
-```bash
-cd cli
-pip install -r requirements.txt
-export TORBOX_API_KEY="your-key-here"
+<details>
+<summary><b>It launched an .nfo file or sample video in previous versions</b></summary>
+v2.0 includes an intelligent file auto-picker that filters out non-video files (`.nfo`, `.txt`, `.jpg`, `.srt`) and picks the main movie file or matching episode.
+</details>
 
-# Movie
-python cli.py tt0111161
-
-# Episode
-python cli.py tt0903747 1 1
-```
+<details>
+<summary><b>Helper script error when clicking MPV or VLC</b></summary>
+Make sure you ran <code>python3 helpers/install.py</code> and that MPV or VLC is installed on your system.
+</details>
 
 ---
 
-## License
+## 📜 License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for details.

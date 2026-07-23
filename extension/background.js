@@ -51,7 +51,7 @@ function connectNativeHelper() {
   }
 }
 
-async function tryLaunchMpv(streamUrl) {
+async function tryLaunchPlayer(streamUrl, player = "mpv") {
   return new Promise((resolve) => {
     try {
       const port = browser.runtime.connectNative(NATIVE_HOST);
@@ -72,11 +72,15 @@ async function tryLaunchMpv(streamUrl) {
         }
       });
 
-      port.postMessage({ action: "launch_mpv", url: streamUrl });
+      port.postMessage({ action: "launch_player", player, url: streamUrl });
     } catch (e) {
       resolve(false);
     }
   });
+}
+
+async function tryLaunchMpv(streamUrl) {
+  return tryLaunchPlayer(streamUrl, "mpv");
 }
 
 // ─── Torrentio Fetch ───────────────────────────────────────────────────────
@@ -216,16 +220,24 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
 
   let launchMethod = "browser"; // default
 
-  if (config.playerPref === "mpv") {
-    const mpvSuccess = await tryLaunchMpv(streamUrl);
+  if (config.playerPref === "vlc") {
+    const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc");
+    launchMethod = vlcSuccess ? "vlc" : "url_only";
+  } else if (config.playerPref === "mpv") {
+    const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv");
     launchMethod = mpvSuccess ? "mpv" : "url_only";
   } else if (config.playerPref === "browser") {
     launchMethod = "browser";
   } else {
     // Auto mode: try mpv for non-browser playable formats or try native helper first
     if (!playableInBrowser) {
-      const mpvSuccess = await tryLaunchMpv(streamUrl);
-      launchMethod = mpvSuccess ? "mpv" : "browser";
+      const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv");
+      if (mpvSuccess) {
+        launchMethod = "mpv";
+      } else {
+        const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc");
+        launchMethod = vlcSuccess ? "vlc" : "browser";
+      }
     } else {
       launchMethod = "browser";
     }
@@ -336,7 +348,13 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
 
     case "TRY_MPV":
-      tryLaunchMpv(msg.url).then(success => {
+      tryLaunchPlayer(msg.url, "mpv").then(success => {
+        sendResponse({ success });
+      });
+      return true;
+
+    case "TRY_PLAYER":
+      tryLaunchPlayer(msg.url, msg.player || "mpv").then(success => {
         sendResponse({ success });
       });
       return true;

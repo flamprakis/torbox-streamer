@@ -444,8 +444,8 @@
     html += `</div>`;
 
     html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Player</span>`;
-    ["auto", "browser", "mpv"].forEach(p => {
-      const label = p === "auto" ? "Auto" : p === "browser" ? "Browser" : "MPV";
+    ["auto", "browser", "mpv", "vlc"].forEach(p => {
+      const label = p === "auto" ? "Auto" : p.toUpperCase();
       const active = activeFilters.playerPref === p ? "active" : "";
       html += `<button class="torbox-filter-btn ${active}" data-filter-player="${p}">${label}</button>`;
     });
@@ -559,6 +559,7 @@
         </div>
         <div style="text-align:center;">
           <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">Open in MPV</button>
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">Open in VLC</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
         </div>
@@ -566,19 +567,32 @@
       document.getElementById("torbox-try-mpv-btn").addEventListener("click", async () => {
         const mpvBtn = document.getElementById("torbox-try-mpv-btn");
         mpvBtn.textContent = "Launching MPV...";
-        const resp = await browser.runtime.sendMessage({ type: "TRY_MPV", url: data.url });
+        const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: data.url });
         if (resp && resp.success) {
           mpvBtn.textContent = "Launched in MPV! 🍿";
         } else {
-          alert("MPV helper script not installed or mpv binary missing. Run 'python3 helpers/install.py' to enable.");
+          alert("Helper script not installed or MPV binary missing. Run 'python3 helpers/install.py' to enable.");
           mpvBtn.textContent = "Open in MPV";
         }
       });
-    } else if (data.method === "mpv") {
+      document.getElementById("torbox-try-vlc-btn").addEventListener("click", async () => {
+        const vlcBtn = document.getElementById("torbox-try-vlc-btn");
+        vlcBtn.textContent = "Launching VLC...";
+        const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: data.url });
+        if (resp && resp.success) {
+          vlcBtn.textContent = "Launched in VLC! 🍿";
+        } else {
+          alert("Helper script not installed or VLC binary missing. Run 'python3 helpers/install.py' to enable.");
+          vlcBtn.textContent = "Open in VLC";
+        }
+      });
+    } else if (data.method === "mpv" || data.method === "vlc") {
+      const icon = data.method === "vlc" ? "🟧" : "🍿";
+      const name = data.method.toUpperCase();
       setModalBody(`
         <div class="torbox-success">
-          <p style="font-size:28px;margin-bottom:8px;">🍿</p>
-          <p><strong>Playing in MPV!</strong></p>
+          <p style="font-size:28px;margin-bottom:8px;">${icon}</p>
+          <p><strong>Playing in ${name}!</strong></p>
           <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
         </div>
         <div style="text-align:center;">
