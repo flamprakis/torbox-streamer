@@ -113,6 +113,15 @@ torbox-streamer/
 
 ---
 
+## 🗺️ Future Roadmap
+
+- [ ] 💬 **Subtitles Support**: Integrated subtitle fetching (OpenSubtitles API / TorBox subs) for in-browser player tab, MPV, and VLC.
+- [ ] 🔌 **Multi-Debrid Integration**: Add support for additional debrid services (RealDebrid, AllDebrid, Premiumize) alongside TorBox.
+- [ ] 🌐 **Multi-Platform Support**: Expand site injection to TMDB, Trakt, Letterboxd, and AniList.
+- [ ] 🎨 **Custom Subtitle Styling**: Configurable font size, language preferences, and subtitle offset controls.
+
+---
+
 ## 📜 License
 
 Distributed under the MIT License. See `LICENSE` for details.
