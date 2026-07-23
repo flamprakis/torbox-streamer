@@ -13,13 +13,15 @@
   },
 
   "icons": {
-    "48": "icons/icon-48.svg",
-    "96": "icons/icon-96.svg"
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
   },
 
   "browser_action": {
     "default_icon": {
-      "48": "icons/icon-48.svg"
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
     },
     "default_title": "TorBox Streamer"
   },
