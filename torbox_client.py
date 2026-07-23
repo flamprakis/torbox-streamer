@@ -181,7 +181,7 @@ class TorBoxClient:
         if torrent_id:
             params["id"] = torrent_id
 
-        data = self._get("torrents/mylist", params=params)
+        data = self._get("torrents/mylist", params=params, timeout=10)
 
         if not data.get("success"):
             return []
@@ -225,7 +225,7 @@ class TorBoxClient:
                 t = torrents[0]
                 if t.is_ready:
                     return t
-                # Print progress
+                # Log progress to stderr (safe for native host)
                 pct = int(t.progress * 100)
                 print(f"\r  ⏳ State: {t.state} ({pct}%)", end="", flush=True, file=sys.stderr)
             time.sleep(poll_interval)

@@ -24,6 +24,7 @@ import json
 import struct
 import sys
 import os
+import time
 import subprocess
 import traceback
 from pathlib import Path
@@ -353,13 +354,20 @@ def handle_stream(msg: dict):
             send_error("Failed to add torrent to TorBox")
             return
 
-    # Wait for ready
+    # Wait for ready — fast path for cached, slower for uncached
     if is_cached:
         send_progress("Waiting for cached torrent...")
+        poll_interval = 1
+        timeout = 30
     else:
         send_progress("Downloading torrent... (this may take a while)")
+        poll_interval = 3
+        timeout = 300
 
-    torrent_info = torbox.wait_for_torrent_ready(torrent_id, timeout=300, poll_interval=3)
+    # Small initial delay to let the API register the torrent
+    time.sleep(0.5)
+
+    torrent_info = torbox.wait_for_torrent_ready(torrent_id, timeout=timeout, poll_interval=poll_interval)
 
     if torrent_info is None:
         send_error("Timed out waiting for torrent. It's still in your TorBox account — try again later.")
