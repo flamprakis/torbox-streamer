@@ -33,6 +33,7 @@ def get_target_dirs():
             base_home / ".waterfox" / "native-messaging-hosts",
             base_home / ".waterfox-current" / "native-messaging-hosts",
             base_home / ".librewolf" / "native-messaging-hosts",
+            base_home / ".zen" / "native-messaging-hosts",
             base_home / ".config" / "google-chrome" / "NativeMessagingHosts",
             base_home / ".config" / "chromium" / "NativeMessagingHosts",
             base_home / ".config" / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts",
@@ -42,6 +43,7 @@ def get_target_dirs():
         dirs.extend([
             base_app_supp / "Mozilla" / "NativeMessagingHosts",
             base_app_supp / "Waterfox" / "NativeMessagingHosts",
+            base_app_supp / "Zen" / "NativeMessagingHosts",
             base_app_supp / "Google" / "Chrome" / "NativeMessagingHosts",
             base_app_supp / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts",
         ])
@@ -50,6 +52,8 @@ def get_target_dirs():
         dirs.extend([
             app_data / "Mozilla" / "NativeMessagingHosts",
             app_data / "Waterfox" / "NativeMessagingHosts",
+            app_data / "Zen" / "NativeMessagingHosts",
+            app_data / "zen" / "NativeMessagingHosts",
         ])
     return dirs
 
