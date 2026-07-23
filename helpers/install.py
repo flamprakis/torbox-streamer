@@ -11,11 +11,11 @@ from pathlib import Path
 
 HOST_NAME = "com.torbox_streamer.host"
 SCRIPT_DIR = Path(__file__).resolve().parent
-HOST_PATH = SCRIPT_DIR / "mpv_host.py"
+HOST_PATH = SCRIPT_DIR / "native_host.py"
 
 MANIFEST_CONTENT = {
     "name": HOST_NAME,
-    "description": "TorBox Streamer MPV Native Launcher",
+    "description": "TorBox Streamer External Player Launcher",
     "path": str(HOST_PATH),
     "type": "stdio",
     "allowed_extensions": [

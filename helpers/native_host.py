@@ -93,8 +93,12 @@ def main():
                 elif action == "launch_mpv":
                     player = "mpv"
 
-                player_bin = find_player_executable(player)
-                log(f"Found binary: {player_bin}")
+                custom_path = msg.get("custom_path")
+                if custom_path and os.path.isfile(custom_path):
+                    player_bin = custom_path
+                else:
+                    player_bin = find_player_executable(player)
+                log(f"Using player binary: {player_bin}")
 
                 if player == "vlc":
                     cmd = [player_bin, url]

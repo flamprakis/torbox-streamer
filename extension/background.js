@@ -52,6 +52,9 @@ function connectNativeHelper() {
 }
 
 async function tryLaunchPlayer(streamUrl, player = "mpv") {
+  const config = await getConfig();
+  const customPath = player === "vlc" ? config.vlc_path : config.mpv_path;
+
   return new Promise((resolve) => {
     try {
       const port = browser.runtime.connectNative(NATIVE_HOST);
@@ -72,7 +75,7 @@ async function tryLaunchPlayer(streamUrl, player = "mpv") {
         }
       });
 
-      port.postMessage({ action: "launch_player", player, url: streamUrl });
+      port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl });
     } catch (e) {
       resolve(false);
     }
