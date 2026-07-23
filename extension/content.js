@@ -701,14 +701,25 @@
 
   async function fetchStreams() {
     if (!imdbInfo) return;
+
+    let targetSeason = imdbInfo.season || 1;
+    let targetEpisode = imdbInfo.episode || 1;
+
+    const sEl = document.getElementById("torbox-season");
+    const eEl = document.getElementById("torbox-episode");
+    if (sEl && eEl) {
+      targetSeason = parseInt(sEl.value) || targetSeason;
+      targetEpisode = parseInt(eEl.value) || targetEpisode;
+      imdbInfo.season = targetSeason;
+      imdbInfo.episode = targetEpisode;
+    }
+
     setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Fetching streams from Torrentio...</p></div>');
 
     const msg = { type: "FETCH_TORRENTIO", imdbId: imdbInfo.imdbId };
     if (imdbInfo.mediaType === "series") {
-      const sEl = document.getElementById("torbox-season");
-      const eEl = document.getElementById("torbox-episode");
-      msg.season = sEl ? parseInt(sEl.value) || 1 : 1;
-      msg.episode = eEl ? parseInt(eEl.value) || 1 : 1;
+      msg.season = targetSeason;
+      msg.episode = targetEpisode;
     }
 
     try {
@@ -769,10 +780,8 @@
     };
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
-      const sEl = document.getElementById("torbox-season");
-      const eEl = document.getElementById("torbox-episode");
-      streamData.season = sEl ? parseInt(sEl.value) || 1 : 1;
-      streamData.episode = eEl ? parseInt(eEl.value) || 1 : 1;
+      streamData.season = imdbInfo.season || 1;
+      streamData.episode = imdbInfo.episode || 1;
     }
 
     try {
