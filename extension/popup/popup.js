@@ -178,6 +178,7 @@ function pickStream(stream) {
     action: "stream",
     hash: stream.info_hash,
     file_idx: stream.file_idx,
+    is_cached: !!stream.cached,
   };
 
   if (currentInfo && currentInfo.mediaType === "series") {

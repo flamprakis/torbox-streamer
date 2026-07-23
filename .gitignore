@@ -1,2 +1,8 @@
-__pycache__/torrentio_client.cpython-314.pyc
-__pycache__/torbox_client.cpython-314.pyc
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.env
+*.xpi

@@ -187,9 +187,10 @@ def main():
         if parsed:
             season, episode = parsed
         else:
-            # Maybe they passed season and episode as separate args
+            # Maybe they passed just a season number (assume episode 1)
             try:
-                season, episode = int(sys.argv[2]), int(sys.argv[3]) if len(sys.argv) > 3 else 1
+                season = int(sys.argv[2])
+                episode = int(sys.argv[3]) if len(sys.argv) > 3 else 1
             except (ValueError, IndexError):
                 pass
 

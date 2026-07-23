@@ -11,6 +11,7 @@
   let currentStreams = [];
   let currentTorrentId = null;
   let modalEl = null;
+  let escHandler = null;
 
   // ─── IMDb Detection ───────────────────────────────────────────────────────
 
@@ -359,9 +360,10 @@
     modalEl.addEventListener("click", (e) => {
       if (e.target === modalEl) closeModal();
     });
-    document.addEventListener("keydown", (e) => {
+    escHandler = (e) => {
       if (e.key === "Escape") closeModal();
-    });
+    };
+    document.addEventListener("keydown", escHandler);
 
     fetchStreams();
   }
@@ -370,6 +372,10 @@
     if (modalEl) {
       modalEl.remove();
       modalEl = null;
+    }
+    if (escHandler) {
+      document.removeEventListener("keydown", escHandler);
+      escHandler = null;
     }
   }
 

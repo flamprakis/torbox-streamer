@@ -11,6 +11,12 @@ let isConnected = false;
 
 const tabInfo = {};
 let activeTabId = null; // Track which tab is using the native host
+let torrentioBaseUrl = "https://torrentio.strem.fun";
+
+// Load saved Torrentio base URL from storage
+browser.storage.local.get("torrentio_base_url").then(stored => {
+  if (stored.torrentio_base_url) torrentioBaseUrl = stored.torrentio_base_url;
+}).catch(() => {});
 
 // ─── Native Messaging ───────────────────────────────────────────────────────
 
@@ -66,7 +72,7 @@ async function fetchTorrentio(imdbId, season, episode) {
     path = `stream/movie/${imdbId}.json`;
   }
 
-  const baseUrl = "https://torrentio.strem.fun";
+  const baseUrl = torrentioBaseUrl;
   const url = `${baseUrl}/${path}`;
 
   try {

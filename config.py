@@ -16,7 +16,6 @@ DEFAULTS = {
     "mpv_path": "mpv",
     "max_results": 20,
     "auto_pick_best_cached": False,
-    "preferred_quality": "1080p",
 }
 
 
@@ -40,7 +39,6 @@ def load_config() -> dict:
         "mpv_path": "MPV_PATH",
         "max_results": "MAX_RESULTS",
         "auto_pick_best_cached": "AUTO_PICK_BEST_CACHED",
-        "preferred_quality": "PREFERRED_QUALITY",
     }
 
     for key, env_var in env_mappings.items():
