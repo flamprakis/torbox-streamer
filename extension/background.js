@@ -1,30 +1,26 @@
 /**
  * TorBox Streamer — Background Script
- * Handles native messaging with the Python host.
+ * - Fetches Torrentio streams (from browser, bypasses Cloudflare)
+ * - Routes TorBox API calls to native host
  */
 
 const NATIVE_HOST = "com.torbox_streamer.host";
 let nativePort = null;
-let messageQueue = [];
 let isConnected = false;
 
-// Track current page info per tab
 const tabInfo = {};
 
 // ─── Native Messaging ───────────────────────────────────────────────────────
 
 function connectNativeHost() {
   if (nativePort) {
-    try {
-      nativePort.disconnect();
-    } catch (e) {}
+    try { nativePort.disconnect(); } catch (e) {}
   }
 
   nativePort = browser.runtime.connectNative(NATIVE_HOST);
   isConnected = true;
 
   nativePort.onMessage.addListener((msg) => {
-    // Route response to the waiting popup
     browser.runtime.sendMessage({ type: "NATIVE_RESPONSE", data: msg }).catch(() => {});
   });
 
@@ -34,7 +30,7 @@ function connectNativeHost() {
     console.warn(`Native host disconnected: ${error}`);
     browser.runtime.sendMessage({
       type: "NATIVE_ERROR",
-      data: { message: `Native host disconnected: ${error}` },
+      data: { message: `Native host error: ${error}` },
     }).catch(() => {});
   });
 }
@@ -46,10 +42,92 @@ function sendToNative(msg) {
   try {
     nativePort.postMessage(msg);
   } catch (e) {
-    // Reconnect and retry once
     connectNativeHost();
     nativePort.postMessage(msg);
   }
+}
+
+// ─── Torrentio Fetch (browser-side, passes Cloudflare) ─────────────────────
+
+async function fetchTorrentio(imdbId, season, episode) {
+  let path;
+  if (season && episode) {
+    path = `stream/series/${imdbId}/${season}/${episode}.json`;
+  } else {
+    path = `stream/movie/${imdbId}.json`;
+  }
+
+  const baseUrl = "https://torrentio.strem.fun";
+  const url = `${baseUrl}/${path}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+
+    const text = await resp.text();
+
+    // Detect Cloudflare block
+    if (text.includes("<!DOCTYPE") || text.includes("cf-error") || text.includes("Cloudflare")) {
+      throw new Error("Torrentio blocked by Cloudflare. Try another instance.");
+    }
+
+    const data = JSON.parse(text);
+    const streams = (data.streams || []).filter(s => s.infoHash);
+
+    return streams.map(s => {
+      const fullText = `${s.name || ""} ${s.title || ""}`;
+      return {
+        info_hash: s.infoHash.toLowerCase(),
+        file_idx: s.fileIdx != null ? s.fileIdx : null,
+        title: (s.title || "").trim(),
+        quality: parseQuality(fullText),
+        size_bytes: parseSize(fullText),
+        size_human: parseSizeHuman(fullText),
+        seeders: parseSeeders(fullText),
+      };
+    });
+  } catch (e) {
+    throw new Error(`Torrentio fetch failed: ${e.message}`);
+  }
+}
+
+// ─── Parsing Helpers ────────────────────────────────────────────────────────
+
+function parseQuality(text) {
+  const t = text.toLowerCase();
+  for (const q of ["2160p", "4k", "1080p", "720p", "480p", "360p"]) {
+    if (t.includes(q)) return q.toUpperCase() === "4K" ? "4K" : q;
+  }
+  for (const q of ["web-dl", "webrip", "bluray", "bdrip", "hdrip", "dvdscr", "cam", "ts"]) {
+    if (t.includes(q)) return q.toUpperCase();
+  }
+  return "";
+}
+
+function parseSize(text) {
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b/i);
+  if (!match) return null;
+  const val = parseFloat(match[1]);
+  const units = { B: 1, KB: 1024, MB: 1048576, GB: 1073741824, TB: 1099511627776 };
+  return Math.floor(val * (units[match[2].toUpperCase()] || 1));
+}
+
+function parseSizeHuman(text) {
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b/i);
+  return match ? `${match[1]} ${match[2].toUpperCase()}` : "?";
+}
+
+function parseSeeders(text) {
+  let m = text.match(/[👤S]\s*(\d+)/);
+  if (m) return parseInt(m[1]);
+  m = text.match(/(\d+)\s*(?:seeds?|seeders?)/i);
+  if (m) return parseInt(m[1]);
+  return null;
 }
 
 // ─── Message Routing ────────────────────────────────────────────────────────
@@ -57,25 +135,28 @@ function sendToNative(msg) {
 browser.runtime.onMessage.addListener((msg, sender) => {
   switch (msg.type) {
     case "PAGE_INFO":
-      // Content script reporting page info
-      if (sender.tab) {
-        tabInfo[sender.tab.id] = msg.data;
-      }
-      break;
-
-    case "NATIVE_REQUEST":
-      // Popup wants to send a message to the native host
-      sendToNative(msg.data);
+      if (sender.tab) tabInfo[sender.tab.id] = msg.data;
       break;
 
     case "GET_TAB_INFO":
-      // Popup asking for current tab's IMDb info
-      return browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
-        if (tabs[0]) {
-          return tabInfo[tabs[0].id] || null;
-        }
-        return null;
+      return browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+        return tabs[0] ? (tabInfo[tabs[0].id] || null) : null;
       });
+
+    case "OPEN_MODAL":
+      // handled by toolbar click below
+      break;
+
+    case "FETCH_TORRENTIO":
+      // Content script wants Torrentio data — fetch from browser context
+      return fetchTorrentio(msg.imdbId, msg.season, msg.episode)
+        .then(streams => ({ type: "TORRENTIO_RESULT", streams }))
+        .catch(e => ({ type: "TORRENTIO_ERROR", message: e.message }));
+
+    case "NATIVE_REQUEST":
+      // Forward to native host (for TorBox API calls)
+      sendToNative(msg.data);
+      break;
 
     case "CONNECT_NATIVE":
       connectNativeHost();
@@ -83,15 +164,13 @@ browser.runtime.onMessage.addListener((msg, sender) => {
   }
 });
 
-// Clean up tab info when tabs close
-browser.tabs.onRemoved.addListener((tabId) => {
-  delete tabInfo[tabId];
-});
-
-// Toolbar icon click → open the modal in the active tab
+// Toolbar icon click
 browser.browserAction.onClicked.addListener((tab) => {
   browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {});
 });
 
-// Connect on startup
+// Cleanup
+browser.tabs.onRemoved.addListener((tabId) => { delete tabInfo[tabId]; });
+
+// Startup
 connectNativeHost();
