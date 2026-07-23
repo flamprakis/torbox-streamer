@@ -100,6 +100,45 @@ def get_clients():
 
 # ─── Action Handlers ────────────────────────────────────────────────────────
 
+def handle_check_cache(msg: dict):
+    """Check TorBox cache for a list of hashes. Streams data comes from the browser."""
+    torbox, _ = get_clients()
+    hashes = msg.get("hashes", [])
+    streams_data = msg.get("streams", [])
+
+    if not hashes:
+        send_error("No hashes to check")
+        return
+
+    send_progress(f"Checking cache for {len(hashes)} streams...")
+
+    try:
+        cache_status = torbox.check_cached(hashes)
+    except ValueError as e:
+        send_error(str(e))
+        return
+
+    # Merge cache status into stream data
+    results = []
+    for s in streams_data:
+        cached = cache_status.get(s.get("info_hash", ""), False)
+        s["cached"] = cached
+        results.append(s)
+
+    # Sort: cached first, then seeders, then size
+    results.sort(key=lambda r: (
+        0 if r.get("cached") else 1,
+        -(r.get("seeders") or 0),
+        -(r.get("size_bytes") or 0),
+    ))
+
+    send_ok({
+        "count": len(results),
+        "cached_count": sum(1 for r in results if r.get("cached")),
+        "streams": results[:20],
+    })
+
+
 def handle_get_streams(msg: dict):
     """Fetch streams from Torrentio and check TorBox cache."""
     global _last_streams
@@ -115,13 +154,17 @@ def handle_get_streams(msg: dict):
 
     send_progress(f"Fetching streams for {imdb_id}...")
 
-    if season and episode:
-        streams = torrentio.get_series_streams(imdb_id, int(season), int(episode))
-    else:
-        streams = torrentio.get_movie_streams(imdb_id)
+    try:
+        if season and episode:
+            streams = torrentio.get_series_streams(imdb_id, int(season), int(episode))
+        else:
+            streams = torrentio.get_movie_streams(imdb_id)
+    except ValueError as e:
+        send_error(str(e))
+        return
 
     if not streams:
-        send_error("No streams found. Check your network or try a different Torrentio instance.")
+        send_error("No streams found. The title may not have torrents available, or Torrentio is blocking the request.")
         return
 
     _last_streams = streams
@@ -176,20 +219,8 @@ def handle_stream(msg: dict):
         send_error("Missing hash")
         return
 
-    # Find the stream in our cached list
-    stream = None
-    for s in _last_streams:
-        if s.info_hash == info_hash:
-            stream = s
-            break
-
-    if not stream:
-        send_error("Stream not found in current results")
-        return
-
-    # Check cache status
-    cache_status = torbox.check_cached([info_hash])
-    is_cached = cache_status.get(info_hash, False)
+    # Use cached status from the message (already determined by the picker)
+    is_cached = msg.get("is_cached", False)
 
     if is_cached:
         send_progress("✅ Cached — adding torrent (instant)...")
@@ -375,6 +406,7 @@ def handle_set_config(msg: dict):
 
 HANDLERS = {
     "get_streams": handle_get_streams,
+    "check_cache": handle_check_cache,
     "stream": handle_stream,
     "pick_file": handle_pick_file,
     "delete_torrent": handle_delete_torrent,
