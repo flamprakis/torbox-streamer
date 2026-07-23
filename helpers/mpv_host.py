@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-"""
-Tiny Native Host for TorBox Streamer — MPV Launcher only.
-No API keys, no logic, no state. Just receives launch_mpv action and runs mpv.
-"""
-
 import json
+import os
+import shutil
 import struct
 import subprocess
 import sys
@@ -26,6 +23,18 @@ def send_message(message):
     sys.stdout.buffer.flush()
 
 
+def find_mpv_executable(player_param):
+    if player_param and os.path.isabs(player_param) and os.path.isfile(player_param):
+        return player_param
+    found = shutil.which(player_param or "mpv")
+    if found:
+        return found
+    for fallback in ["/usr/bin/mpv", "/usr/local/bin/mpv", "/snap/bin/mpv"]:
+        if os.path.isfile(fallback):
+            return fallback
+    return player_param or "mpv"
+
+
 def main():
     while True:
         try:
@@ -39,12 +48,15 @@ def main():
                     continue
 
                 player = msg.get("player", "mpv")
-                cmd = [player, "--force-window=yes", url]
+                mpv_bin = find_mpv_executable(player)
+                cmd = [mpv_bin, "--force-window=yes", url]
 
                 subprocess.Popen(
                     cmd,
+                    stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
+                    start_new_session=True,
                 )
                 send_message({"status": "ok"})
             else:

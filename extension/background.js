@@ -198,14 +198,8 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
     throw new Error("Timed out waiting for torrent download on TorBox.");
   }
 
-  // Pick file
-  let selectedFile = null;
-  if (file_idx != null) {
-    selectedFile = torrent.files.find(f => f.id === file_idx);
-  }
-  if (!selectedFile) {
-    selectedFile = autoPickFile(torrent.files, file_idx, season, episode);
-  }
+  // Pick file using smart file selection (filters out .nfo, .txt, samples)
+  const selectedFile = autoPickFile(torrent.files, file_idx, season, episode);
 
   if (!selectedFile) {
     // Return file list for manual picking if auto-pick returned nothing

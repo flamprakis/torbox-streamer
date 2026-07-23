@@ -298,8 +298,8 @@ function isBrowserPlayable(filename) {
 /**
  * Intelligently pick the right file from a torrent.
  * Strategy:
- *   1. Single file → return it
- *   2. For series: match episode pattern in filename
+ *   1. If fileIdx points to a valid video file (>20MB, video ext), use it
+ *   2. For series: match episode pattern in filename among video files
  *   3. Pick the largest video file (by size)
  *   4. If no video extension match, pick largest non-skip file
  *   5. Last resort: largest file overall
@@ -307,10 +307,22 @@ function isBrowserPlayable(filename) {
 function autoPickFile(files, fileIdx, season, episode) {
   if (!files || files.length === 0) return null;
 
-  // Single file
-  if (files.length === 1) return files[0];
+  // 1. If fileIdx is provided, validate that it points to an actual video file (not .nfo / .txt)
+  if (fileIdx != null) {
+    const candidate = files.find(f => f.id === fileIdx || f.id === fileIdx + 1);
+    if (candidate && isVideoFile(candidate.name) && candidate.size > 20_000_000) {
+      return candidate;
+    }
+  }
 
-  // For series: try episode pattern matching
+  // Single file torrent
+  if (files.length === 1) {
+    const ext = getFileExt(files[0].name);
+    if (SKIP_EXTS.has(ext)) return null;
+    return files[0];
+  }
+
+  // 2. For series: try episode pattern matching among video files
   if (season && episode) {
     const s = parseInt(season);
     const e = parseInt(episode);
@@ -335,18 +347,18 @@ function autoPickFile(files, fileIdx, season, episode) {
     }
   }
 
-  // Pick the largest video file
-  const videoFiles = files.filter(f => isVideoFile(f.name));
+  // 3. Pick the largest video file
+  const videoFiles = files.filter(f => isVideoFile(f.name) && f.size > 10_000_000);
   if (videoFiles.length > 0) {
     return videoFiles.reduce((a, b) => a.size > b.size ? a : b);
   }
 
-  // Filter out known non-video, pick largest
+  // 4. Filter out known non-video/skip extensions, pick largest
   const nonSkip = files.filter(f => !SKIP_EXTS.has(getFileExt(f.name)));
   if (nonSkip.length > 0) {
     return nonSkip.reduce((a, b) => a.size > b.size ? a : b);
   }
 
-  // Last resort: largest file
+  // 5. Last resort: largest file overall
   return files.reduce((a, b) => a.size > b.size ? a : b);
 }
