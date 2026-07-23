@@ -85,15 +85,27 @@
     const isMovie = url.includes("/movie/");
     if (!isTv && !isMovie) return null;
 
-    // Look for IMDb external link on TMDB page across all links
+    // Look for IMDb external link on TMDB page across all links & page HTML
     let pageImdbId = null;
-    const imdbLinks = document.querySelectorAll('a[href*="imdb.com"]');
+    const imdbLinks = document.querySelectorAll('a[href*="imdb"]');
     for (const a of imdbLinks) {
-      const match = a.href.match(/imdb\.com\/title\/(tt\d{7,})/);
+      const match = (a.href || "").match(/(tt\d{7,})/);
       if (match) {
         pageImdbId = match[1];
         break;
       }
+    }
+
+    // Fallback 1: HTML search for imdb.com/title/ttXXXXXXX
+    if (!pageImdbId && document.documentElement) {
+      const htmlMatch = document.documentElement.innerHTML.match(/imdb\.com\/title\/(tt\d{7,})/i);
+      if (htmlMatch) pageImdbId = htmlMatch[1];
+    }
+
+    // Fallback 2: HTML search for "imdb_id":"ttXXXXXXX"
+    if (!pageImdbId && document.documentElement) {
+      const jsonMatch = document.documentElement.innerHTML.match(/"imdb_id"\s*:\s*"(tt\d{7,})"/i);
+      if (jsonMatch) pageImdbId = jsonMatch[1];
     }
 
     let mediaType = isTv ? "series" : "movie";
@@ -830,7 +842,23 @@
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   async function fetchStreams() {
-    if (!imdbInfo) return;
+    if (!imdbInfo || !imdbInfo.imdbId) {
+      if (window.location.hostname.includes("themoviedb.org")) {
+        imdbInfo = extractTmdbInfo();
+      } else {
+        imdbInfo = extractImdbInfo();
+      }
+    }
+
+    if (!imdbInfo || !imdbInfo.imdbId) {
+      setModalBody(`
+        <div class="torbox-error">
+          ⚠ Could not resolve IMDb ID for this title.<br>
+          <span style="font-size:12px;opacity:0.8;margin-top:6px;display:block;">Try refreshing the page or ensuring external links are loaded.</span>
+        </div>
+      `);
+      return;
+    }
 
     let targetSeason = imdbInfo.season || 1;
     let targetEpisode = imdbInfo.episode || 1;
