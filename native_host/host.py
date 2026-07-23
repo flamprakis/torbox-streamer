@@ -125,6 +125,83 @@ def get_clients():
     return _torbox, _torrentio
 
 
+# ─── File Auto-Selection ───────────────────────────────────────────────────
+
+VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".webm", ".mov", ".m4v", ".wmv", ".flv", ".ts", ".m2ts"}
+SKIP_EXTS = {".srt", ".sub", ".ass", ".ssa", ".idx", ".nfo", ".txt", ".jpg", ".jpeg",
+             ".png", ".gif", ".bmp", ".tbn", ".xml", ".html", ".htm", ".url", ".lnk"}
+
+def _is_video_file(filename: str) -> bool:
+    """Check if a filename looks like a video file."""
+    ext = Path(filename).suffix.lower()
+    if ext in VIDEO_EXTS:
+        return True
+    if ext in SKIP_EXTS:
+        return False
+    # No extension or unknown extension — check if it's in a video-like path
+    name_lower = filename.lower()
+    # Skip obvious non-video paths
+    if any(skip in name_lower for skip in ["subtitle", "subs/", "sample/", "proof", "cover", "poster", "artwork"]):
+        return False
+    # If no extension, it might still be video (some torrents have extensionless files)
+    if not ext:
+        return True  # Give it a chance — size-based selection will handle it
+    return False
+
+
+def _auto_pick_file(torrent_info, file_idx, season, episode):
+    """
+    Intelligently pick the right file from a torrent.
+    Strategy:
+      1. Single file → return it
+      2. For series: match episode pattern in filename
+      3. Pick the largest video file (by size)
+      4. If no video extension match, pick largest file that isn't a known skip type
+      5. Last resort: largest file overall
+    """
+    files = torrent_info.files
+    if not files:
+        return None
+
+    # Single file torrent
+    if len(files) == 1:
+        return files[0]
+
+    # For series: try episode pattern matching
+    if season and episode:
+        patterns = [
+            f"s{int(season):02d}e{int(episode):02d}",
+            f"s{int(season)}e{int(episode):02d}",
+            f"{int(season):02d}x{int(episode):02d}",
+            f" - {int(episode)} ",
+            f" - {int(episode):02d} ",
+            f"e{int(episode):02d}",
+        ]
+        for pattern in patterns:
+            for f in files:
+                if pattern in f.name.lower() and _is_video_file(f.name):
+                    return f
+            # Also try without video check (some files have weird names)
+            for f in files:
+                if pattern in f.name.lower() and f.size > 100_000_000:  # >100MB likely video
+                    return f
+
+    # Filter to video files
+    video_files = [f for f in files if _is_video_file(f.name)]
+
+    if video_files:
+        # Pick the largest video file
+        return max(video_files, key=lambda f: f.size)
+
+    # No clear video files — filter out known non-video
+    non_skip = [f for f in files if Path(f.name).suffix.lower() not in SKIP_EXTS]
+    if non_skip:
+        return max(non_skip, key=lambda f: f.size)
+
+    # Last resort: largest file
+    return max(files, key=lambda f: f.size)
+
+
 # ─── Action Handlers ────────────────────────────────────────────────────────
 
 def handle_check_cache(msg: dict):
@@ -160,11 +237,10 @@ def handle_check_cache(msg: dict):
         s["cached"] = cached
         results.append(s)
 
-    # Sort: cached first, then seeders, then size
+    # Sort: cached first, then preserve Torrentio's original ranking
     results.sort(key=lambda r: (
         0 if r.get("cached") else 1,
-        -(r.get("seeders") or 0),
-        -(r.get("size_bytes") or 0),
+        r.get("original_index", 999),
     ))
 
     send_ok({
@@ -209,9 +285,9 @@ def handle_get_streams(msg: dict):
     hashes = [s.info_hash for s in streams]
     cache_status = torbox.check_cached(hashes)
 
-    # Build response data
+    # Build response data (preserve Torrentio order)
     results = []
-    for s in streams:
+    for idx, s in enumerate(streams):
         cached = cache_status.get(s.info_hash, False)
         results.append({
             "info_hash": s.info_hash,
@@ -222,13 +298,13 @@ def handle_get_streams(msg: dict):
             "size_human": s.size_human,
             "seeders": s.seeders,
             "cached": cached,
+            "original_index": idx,
         })
 
-    # Sort: cached first, then seeders, then size
+    # Sort: cached first, then preserve Torrentio's original ranking
     results.sort(key=lambda r: (
         0 if r["cached"] else 1,
-        -(r["seeders"] or 0),
-        -(r["size_bytes"] or 0),
+        r.get("original_index", 999),
     ))
 
     send_ok({
@@ -291,34 +367,8 @@ def handle_stream(msg: dict):
 
     send_progress(f"Ready! State: {torrent_info.state}")
 
-    # Pick file
-    chosen_file = None
-
-    # Try file_idx from Torrentio first
-    if file_idx is not None:
-        for f in torrent_info.files:
-            if f.id == file_idx:
-                chosen_file = f
-                break
-
-    # Try episode matching for series
-    if not chosen_file and season and episode:
-        hint = f"s{int(season):02d}e{int(episode):02d}"
-        for f in torrent_info.files:
-            if hint in f.name.lower():
-                chosen_file = f
-                break
-
-    # Single file torrent
-    if not chosen_file and len(torrent_info.files) == 1:
-        chosen_file = torrent_info.files[0]
-
-    # Pick the largest video file as fallback
-    if not chosen_file:
-        video_exts = (".mkv", ".mp4", ".avi", ".webm", ".mov")
-        video_files = [f for f in torrent_info.files if Path(f.name).suffix.lower() in video_exts]
-        if video_files:
-            chosen_file = max(video_files, key=lambda f: f.size)
+    # Pick file — robust auto-selection
+    chosen_file = _auto_pick_file(torrent_info, file_idx, season, episode)
 
     if not chosen_file:
         # Return file list for manual picking

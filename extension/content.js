@@ -138,8 +138,8 @@
         background: #1a1a2e;
         border: 1px solid #333;
         border-radius: 12px;
-        width: 700px;
-        max-width: 94vw;
+        width: 910px;
+        max-width: 96vw;
         max-height: 80vh;
         overflow-y: auto;
         box-shadow: 0 20px 60px rgba(0,0,0,0.6);
@@ -251,8 +251,8 @@
       .torbox-size { color: #ce93d8; min-width: 65px; text-align: right; font-size: 12px; }
       .torbox-seeders { color: #ffd54f; min-width: 40px; text-align: right; font-size: 12px; }
       .torbox-title {
-        flex: 1; overflow: hidden; text-overflow: ellipsis;
-        white-space: nowrap; color: #bbb; font-size: 12px;
+        flex: 1; color: #bbb; font-size: 12px;
+        word-break: break-all;
       }
       .torbox-filters {
         display: flex;

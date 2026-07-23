@@ -88,7 +88,7 @@ async function fetchTorrentio(imdbId, season, episode) {
     const data = JSON.parse(text);
     const streams = (data.streams || []).filter(s => s.infoHash);
 
-    return streams.map(s => {
+    return streams.map((s, idx) => {
       const fullText = `${s.name || ""} ${s.title || ""}`;
       return {
         info_hash: s.infoHash.toLowerCase(),
@@ -98,6 +98,7 @@ async function fetchTorrentio(imdbId, season, episode) {
         size_bytes: parseSize(fullText),
         size_human: parseSizeHuman(fullText),
         seeders: parseSeeders(fullText),
+        original_index: idx, // Preserve Torrentio's ranking order
       };
     });
   } catch (e) {
