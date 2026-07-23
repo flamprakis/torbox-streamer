@@ -12,13 +12,6 @@
     }
   },
 
-  "applications": {
-    "gecko": {
-      "id": "torbox-streamer@arena",
-      "strict_min_version": "78.0"
-    }
-  },
-
   "icons": {
     "48": "icons/icon-48.svg",
     "96": "icons/icon-96.svg"
