@@ -42,6 +42,7 @@ cat <<EOF > "$MANIFEST_TMP"
   "path": "$FINAL_EXEC",
   "type": "stdio",
   "allowed_extensions": [
+    "torbox-streamer@arena",
     "torbox-streamer@flamprakis.com"
   ],
   "allowed_origins": [

@@ -45,6 +45,7 @@ set "MANIFEST_PATH=%TARGET_DIR%\com.torbox_streamer.host.json"
     echo   "path": "!ESCAPED_EXEC!",
     echo   "type": "stdio",
     echo   "allowed_extensions": [
+    echo     "torbox-streamer@arena",
     echo     "torbox-streamer@flamprakis.com"
     echo   ],
     echo   "allowed_origins": [
