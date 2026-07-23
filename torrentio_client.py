@@ -4,6 +4,7 @@ Fetches torrent streams for movies and TV series episodes.
 """
 
 import re
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
@@ -117,16 +118,16 @@ class TorrentioClient:
 
             data = resp.json()
         except requests.Timeout:
-            print("  ⚠ Torrentio request timed out (10s)")
+            print("  ⚠ Torrentio request timed out (10s)", file=sys.stderr)
             raise ValueError("Torrentio timed out. The service may be down or blocking your connection.")
         except requests.RequestException as e:
-            print(f"  ⚠ Torrentio request failed: {e}")
+            print(f"  ⚠ Torrentio request failed: {e}", file=sys.stderr)
             raise ValueError(f"Torrentio request failed: {e}")
         except ValueError as e:
             # Re-raise our custom ValueError, catch JSON parse errors
             if "Torrentio" in str(e) or "Cloudflare" in str(e) or "timed out" in str(e):
                 raise
-            print("  ⚠ Torrentio returned invalid JSON")
+            print("  ⚠ Torrentio returned invalid JSON", file=sys.stderr)
             raise ValueError("Torrentio returned an unexpected response (possibly a Cloudflare challenge).")
 
         streams = []

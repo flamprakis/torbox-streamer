@@ -4,6 +4,7 @@ Wraps the torrent endpoints: checkcached, createtorrent, mylist, requestdl, cont
 """
 
 import time
+import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -65,9 +66,9 @@ class TorBoxClient:
             "Authorization": f"Bearer {api_key}",
         })
 
-    def _get(self, endpoint: str, params: dict = None) -> dict:
+    def _get(self, endpoint: str, params: dict = None, timeout: int = 30) -> dict:
         url = f"{BASE_URL}/{endpoint}"
-        resp = self.session.get(url, params=params, timeout=30)
+        resp = self.session.get(url, params=params, timeout=timeout)
         resp.raise_for_status()
         return resp.json()
 
@@ -93,36 +94,39 @@ class TorBoxClient:
         """
         Check which hashes are cached on TorBox servers.
         Returns a dict mapping hash -> is_cached.
-        Uses POST with JSON body to avoid URL length limits.
+        Uses GET with comma-separated hashes in small batches (20 per request).
         """
         result = {}
         # Deduplicate hashes
         unique_hashes = list(dict.fromkeys(h.lower() for h in hashes))
-        batch_size = 50
+        batch_size = 20
 
         for i in range(0, len(unique_hashes), batch_size):
             batch = unique_hashes[i:i + batch_size]
+            hash_str = ",".join(batch)
 
             try:
-                # Try POST method first (avoids URL length issues)
-                data = self._post_json("torrents/checkcached", json_body={
-                    "hashes": batch,
-                })
-            except (requests.HTTPError, Exception):
-                try:
-                    # Fallback: GET with multiple hash params (smaller batch)
-                    data = self._get("torrents/checkcached", params=[
-                        ("hash", h) for h in batch[:25]
-                    ] + [("format", "object"), ("list_files", "false")])
-                except requests.HTTPError as e:
-                    if e.response is not None and e.response.status_code == 403:
-                        raise ValueError(
-                            "TorBox returned 403 Forbidden. Your API key may be invalid. "
-                            "Check it at https://torbox.app/dashboard → Settings → API."
-                        )
-                    for h in batch:
-                        result[h] = False
-                    continue
+                data = self._get("torrents/checkcached", params={
+                    "hash": hash_str,
+                    "format": "object",
+                    "list_files": "false",
+                }, timeout=10)
+            except requests.HTTPError as e:
+                status = e.response.status_code if e.response is not None else 0
+                if status == 403:
+                    raise ValueError(
+                        "TorBox returned 403 Forbidden on cache check. "
+                        "Your API key may be invalid or expired."
+                    )
+                # For other HTTP errors, mark batch as uncached
+                for h in batch:
+                    result[h] = False
+                continue
+            except Exception:
+                # Timeout or connection error — mark as uncached, don't hang
+                for h in batch:
+                    result[h] = False
+                continue
 
             if data.get("success") and data.get("data"):
                 resp_data = data["data"]
@@ -131,8 +135,8 @@ class TorBoxClient:
                         result[hash_key.lower()] = cached_info is not None and cached_info != False
                 elif isinstance(resp_data, list):
                     for item in resp_data:
-                        if isinstance(item, dict) and item.get("hash"):
-                            result[item["hash"].lower()] = True
+                        if isinstance(item, str):
+                            result[item.lower()] = True
             else:
                 for h in batch:
                     result[h] = False
@@ -163,7 +167,7 @@ class TorBoxClient:
         else:
             error = data.get("error", "UNKNOWN")
             detail = data.get("detail", "Unknown error")
-            print(f"  ⚠ TorBox error: {error} - {detail}")
+            print(f"  ⚠ TorBox error: {error} - {detail}", file=sys.stderr)
             return None
 
     # ─── Torrent List / Info ───────────────────────────────────────────────
@@ -223,10 +227,10 @@ class TorBoxClient:
                     return t
                 # Print progress
                 pct = int(t.progress * 100)
-                print(f"\r  ⏳ State: {t.state} ({pct}%)", end="", flush=True)
+                print(f"\r  ⏳ State: {t.state} ({pct}%)", end="", flush=True, file=sys.stderr)
             time.sleep(poll_interval)
 
-        print()  # newline after progress
+        print(file=sys.stderr)  # newline after progress
         return None
 
     # ─── Download Link ─────────────────────────────────────────────────────

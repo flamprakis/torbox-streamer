@@ -2,6 +2,7 @@
  * TorBox Streamer — Background Script
  * - Fetches Torrentio streams (from browser, bypasses Cloudflare)
  * - Routes TorBox API calls to native host
+ * - Uses tab-targeted messaging (not broadcast) for reliability
  */
 
 const NATIVE_HOST = "com.torbox_streamer.host";
@@ -9,6 +10,7 @@ let nativePort = null;
 let isConnected = false;
 
 const tabInfo = {};
+let activeTabId = null; // Track which tab is using the native host
 
 // ─── Native Messaging ───────────────────────────────────────────────────────
 
@@ -21,21 +23,28 @@ function connectNativeHost() {
   isConnected = true;
 
   nativePort.onMessage.addListener((msg) => {
-    browser.runtime.sendMessage({ type: "NATIVE_RESPONSE", data: msg }).catch(() => {});
+    // Send response back to the specific tab that made the request
+    if (activeTabId) {
+      browser.tabs.sendMessage(activeTabId, { type: "NATIVE_RESPONSE", data: msg })
+        .catch((e) => console.warn("tabs.sendMessage failed:", e));
+    }
   });
 
   nativePort.onDisconnect.addListener((port) => {
     isConnected = false;
     const error = port.error ? port.error.message : "unknown";
     console.warn(`Native host disconnected: ${error}`);
-    browser.runtime.sendMessage({
-      type: "NATIVE_ERROR",
-      data: { message: `Native host error: ${error}` },
-    }).catch(() => {});
+    if (activeTabId) {
+      browser.tabs.sendMessage(activeTabId, {
+        type: "NATIVE_ERROR",
+        data: { message: `Native host error: ${error}` },
+      }).catch(() => {});
+    }
   });
 }
 
-function sendToNative(msg) {
+function sendToNative(msg, tabId) {
+  activeTabId = tabId; // Remember which tab to respond to
   if (!isConnected || !nativePort) {
     connectNativeHost();
   }
@@ -101,7 +110,7 @@ async function fetchTorrentio(imdbId, season, episode) {
 function parseQuality(text) {
   const t = text.toLowerCase();
   for (const q of ["2160p", "4k", "1080p", "720p", "480p", "360p"]) {
-    if (t.includes(q)) return q.toUpperCase() === "4K" ? "4K" : q;
+    if (t.includes(q)) return q === "4k" ? "4K" : q;
   }
   for (const q of ["web-dl", "webrip", "bluray", "bdrip", "hdrip", "dvdscr", "cam", "ts"]) {
     if (t.includes(q)) return q.toUpperCase();
@@ -123,7 +132,7 @@ function parseSizeHuman(text) {
 }
 
 function parseSeeders(text) {
-  let m = text.match(/[👤S]\s*(\d+)/);
+  let m = text.match(/[\u{1F464}S]\s*(\d+)/u);
   if (m) return parseInt(m[1]);
   m = text.match(/(\d+)\s*(?:seeds?|seeders?)/i);
   if (m) return parseInt(m[1]);
@@ -133,19 +142,17 @@ function parseSeeders(text) {
 // ─── Message Routing ────────────────────────────────────────────────────────
 
 browser.runtime.onMessage.addListener((msg, sender) => {
+  const senderTabId = sender.tab ? sender.tab.id : null;
+
   switch (msg.type) {
     case "PAGE_INFO":
-      if (sender.tab) tabInfo[sender.tab.id] = msg.data;
+      if (senderTabId) tabInfo[senderTabId] = msg.data;
       break;
 
     case "GET_TAB_INFO":
       return browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
         return tabs[0] ? (tabInfo[tabs[0].id] || null) : null;
       });
-
-    case "OPEN_MODAL":
-      // handled by toolbar click below
-      break;
 
     case "FETCH_TORRENTIO":
       // Content script wants Torrentio data — fetch from browser context
@@ -154,8 +161,8 @@ browser.runtime.onMessage.addListener((msg, sender) => {
         .catch(e => ({ type: "TORRENTIO_ERROR", message: e.message }));
 
     case "NATIVE_REQUEST":
-      // Forward to native host (for TorBox API calls)
-      sendToNative(msg.data);
+      // Forward to native host, remembering which tab to respond to
+      sendToNative(msg.data, senderTabId);
       break;
 
     case "CONNECT_NATIVE":
@@ -170,7 +177,10 @@ browser.browserAction.onClicked.addListener((tab) => {
 });
 
 // Cleanup
-browser.tabs.onRemoved.addListener((tabId) => { delete tabInfo[tabId]; });
+browser.tabs.onRemoved.addListener((tabId) => {
+  delete tabInfo[tabId];
+  if (activeTabId === tabId) activeTabId = null;
+});
 
 // Startup
 connectNativeHost();

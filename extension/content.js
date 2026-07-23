@@ -138,9 +138,9 @@
         background: #1a1a2e;
         border: 1px solid #333;
         border-radius: 12px;
-        width: 520px;
-        max-width: 92vw;
-        max-height: 75vh;
+        width: 700px;
+        max-width: 94vw;
+        max-height: 80vh;
         overflow-y: auto;
         box-shadow: 0 20px 60px rgba(0,0,0,0.6);
         animation: torbox-slide-up 0.25s ease;
@@ -252,7 +252,46 @@
       .torbox-seeders { color: #ffd54f; min-width: 40px; text-align: right; font-size: 12px; }
       .torbox-title {
         flex: 1; overflow: hidden; text-overflow: ellipsis;
-        white-space: nowrap; color: #999; font-size: 11px;
+        white-space: nowrap; color: #bbb; font-size: 12px;
+      }
+      .torbox-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #2a2a4a;
+      }
+      .torbox-filter-btn {
+        padding: 4px 10px;
+        border-radius: 12px;
+        border: 1px solid #444;
+        background: transparent;
+        color: #aaa;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .torbox-filter-btn:hover {
+        border-color: #888;
+        color: #fff;
+      }
+      .torbox-filter-btn.active {
+        background: #f5c518;
+        color: #000;
+        border-color: #f5c518;
+        font-weight: 600;
+      }
+      .torbox-filter-group {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .torbox-filter-label {
+        font-size: 10px;
+        color: #666;
+        text-transform: uppercase;
+        margin-right: 2px;
       }
       .torbox-file-item {
         padding: 8px 10px;
@@ -436,7 +475,23 @@
 
   // ─── Renderers ────────────────────────────────────────────────────────────
 
+  let activeFilters = { quality: "all", cachedOnly: false };
+
+  function getFilteredStreams() {
+    let filtered = currentStreams;
+    if (activeFilters.quality !== "all") {
+      filtered = filtered.filter(s => s.quality === activeFilters.quality);
+    }
+    if (activeFilters.cachedOnly) {
+      filtered = filtered.filter(s => s.cached);
+    }
+    return filtered;
+  }
+
   function renderStreams(data) {
+    // Store full results
+    if (data.streams) currentStreams = data.streams;
+
     let html = "";
 
     // Episode picker for series
@@ -450,11 +505,31 @@
       `;
     }
 
-    html += `<div class="torbox-stats">${data.count} streams &bull; ${data.cached_count} cached \u2705 &bull; ${data.count - data.cached_count} uncached</div>`;
+    // Filter bar
+    const qualities = ["all", ...new Set(currentStreams.map(s => s.quality).filter(Boolean))];
+    const cachedCount = currentStreams.filter(s => s.cached).length;
 
-    data.streams.forEach((s, i) => {
+    html += `<div class="torbox-filters">`;
+    html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Quality</span>`;
+    qualities.forEach(q => {
+      const label = q === "all" ? "All" : q;
+      const active = activeFilters.quality === q ? "active" : "";
+      html += `<button class="torbox-filter-btn ${active}" data-filter-quality="${q}">${label}</button>`;
+    });
+    html += `</div>`;
+    html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Status</span>`;
+    html += `<button class="torbox-filter-btn ${activeFilters.cachedOnly ? 'active' : ''}" data-filter-cached="true">Cached Only (${cachedCount})</button>`;
+    html += `</div></div>`;
+
+    // Stats
+    const filtered = getFilteredStreams();
+    html += `<div class="torbox-stats">Showing ${filtered.length} of ${currentStreams.length} streams &bull; ${cachedCount} cached \u2705</div>`;
+
+    // Stream list
+    filtered.forEach((s, i) => {
+      const origIdx = currentStreams.indexOf(s);
       html += `
-        <div class="torbox-stream-item ${s.cached ? "cached" : "uncached"}" data-idx="${i}">
+        <div class="torbox-stream-item ${s.cached ? "cached" : "uncached"}" data-idx="${origIdx}">
           <span class="torbox-badge ${s.cached ? "torbox-badge-cached" : "torbox-badge-uncached"}">${s.cached ? "CACHED" : "\u2014"}</span>
           <span class="torbox-quality">${escapeHtml(s.quality || "???")}</span>
           <span class="torbox-size">${escapeHtml(s.size_human || "?")}</span>
@@ -464,16 +539,34 @@
       `;
     });
 
+    if (filtered.length === 0) {
+      html += `<div class="torbox-error">No streams match the current filters.</div>`;
+    }
+
     setModalBody(html);
 
     // Bind episode picker
     const epBtn = document.getElementById("torbox-ep-go");
     if (epBtn) {
-      epBtn.addEventListener("click", () => fetchStreams());
+      epBtn.addEventListener("click", () => { activeFilters = { quality: "all", cachedOnly: false }; fetchStreams(); });
     }
 
+    // Bind filter buttons
+    document.querySelectorAll("[data-filter-quality]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        activeFilters.quality = btn.dataset.filterQuality;
+        renderStreams({});
+      });
+    });
+    document.querySelectorAll("[data-filter-cached]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        activeFilters.cachedOnly = !activeFilters.cachedOnly;
+        renderStreams({});
+      });
+    });
+
     // Bind stream clicks
-    document.querySelectorAll(".torbox-stream-item").forEach((el) => {
+    document.querySelectorAll(".torbox-stream-item").forEach(el => {
       el.addEventListener("click", () => {
         const idx = parseInt(el.dataset.idx);
         pickStream(currentStreams[idx]);

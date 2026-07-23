@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 """
 Native Messaging Host for torbox-streamer.
 
@@ -27,16 +27,43 @@ import os
 import subprocess
 import traceback
 from pathlib import Path
+from datetime import datetime
 
 # Add parent directory to path so we can import our modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config import load_config, save_config, get_api_key
-from torrentio_client import TorrentioClient, Stream
-from torbox_client import TorBoxClient, TorrentFile, TorrentInfo
+# ─── Debug Logging ──────────────────────────────────────────────────────────
+LOG_FILE = Path.home() / ".config" / "torbox-streamer" / "host_debug.log"
+
+def log(msg: str):
+    """Append a debug log line."""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG_FILE, "a") as f:
+            f.write(f"[{datetime.now().isoformat()}] {msg}\n")
+    except Exception:
+        pass  # Never let logging crash the host
+
+log("=== Native host starting ===")
+
+try:
+    from config import load_config, save_config, get_api_key
+    from torrentio_client import TorrentioClient, Stream
+    from torbox_client import TorBoxClient, TorrentFile, TorrentInfo
+    log("Imports OK")
+except Exception as e:
+    log(f"IMPORT ERROR: {e}")
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
 
 
 # ─── Native Messaging Protocol ─────────────────────────────────────────────
+
+# SAFETY NET: Save the real stdout for protocol messages, then redirect
+# sys.stdout to stderr so any stray print() (from our code or dependencies)
+# can NEVER corrupt the native messaging binary pipe.
+_real_stdout = sys.stdout.buffer
+sys.stdout = sys.stderr
 
 def read_message() -> dict:
     """Read a length-prefixed JSON message from stdin."""
@@ -49,11 +76,11 @@ def read_message() -> dict:
 
 
 def send_message(msg: dict):
-    """Write a length-prefixed JSON message to stdout."""
+    """Write a length-prefixed JSON message to the REAL stdout (protocol pipe)."""
     encoded = json.dumps(msg).encode("utf-8")
-    sys.stdout.buffer.write(struct.pack("=I", len(encoded)))
-    sys.stdout.buffer.write(encoded)
-    sys.stdout.buffer.flush()
+    _real_stdout.write(struct.pack("=I", len(encoded)))
+    _real_stdout.write(encoded)
+    _real_stdout.flush()
 
 
 def send_ok(data):
@@ -102,6 +129,7 @@ def get_clients():
 
 def handle_check_cache(msg: dict):
     """Check TorBox cache for a list of hashes. Streams data comes from the browser."""
+    log(f"handle_check_cache called, {len(msg.get('hashes', []))} hashes")
     torbox, _ = get_clients()
     hashes = msg.get("hashes", [])
     streams_data = msg.get("streams", [])
@@ -113,9 +141,16 @@ def handle_check_cache(msg: dict):
     send_progress(f"Checking cache for {len(hashes)} streams...")
 
     try:
+        log("Calling torbox.check_cached...")
         cache_status = torbox.check_cached(hashes)
+        log(f"check_cached returned {len(cache_status)} results")
     except ValueError as e:
+        log(f"check_cached ValueError: {e}")
         send_error(str(e))
+        return
+    except Exception as e:
+        log(f"check_cached unexpected error: {type(e).__name__}: {e}")
+        send_error(f"Cache check failed: {e}")
         return
 
     # Merge cache status into stream data
@@ -416,18 +451,22 @@ HANDLERS = {
 
 
 def main():
+    log("Entering main loop")
     while True:
         try:
             msg = read_message()
             action = msg.get("action", "")
+            log(f"Received action: {action}")
             handler = HANDLERS.get(action)
             if handler:
                 handler(msg)
+                log(f"Handler {action} completed")
             else:
+                log(f"Unknown action: {action}")
                 send_error(f"Unknown action: {action}")
         except Exception as e:
+            log(f"ERROR in main loop: {type(e).__name__}: {e}")
             send_error(f"{type(e).__name__}: {str(e)}")
-            # Log full traceback to stderr for debugging
             traceback.print_exc(file=sys.stderr)
 
 
