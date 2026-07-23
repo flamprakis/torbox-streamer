@@ -1,0 +1,51 @@
+{
+  "manifest_version": 2,
+  "name": "TorBox Streamer",
+  "version": "1.0.0",
+  "description": "Stream movies and TV shows from IMDb pages via Torrentio + TorBox + mpv",
+  "author": "torbox-streamer",
+
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "torbox-streamer@arena",
+      "strict_min_version": "78.0"
+    }
+  },
+
+  "icons": {
+    "48": "icons/icon-48.svg",
+    "96": "icons/icon-96.svg"
+  },
+
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.svg"
+    },
+    "default_title": "TorBox Streamer",
+    "default_popup": "popup/popup.html"
+  },
+
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
+
+  "content_scripts": [
+    {
+      "matches": [
+        "*://www.imdb.com/title/*",
+        "*://m.imdb.com/title/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "storage",
+    "*://www.imdb.com/*",
+    "*://m.imdb.com/*"
+  ]
+}
