@@ -377,7 +377,10 @@
 
   function setModalBody(html) {
     const body = document.getElementById("torbox-modal-body");
-    if (body) body.innerHTML = html;
+    if (body) {
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      body.replaceChildren(...parsed.body.childNodes);
+    }
   }
 
   // ─── Background Messaging ────────────────────────────────────────────────
