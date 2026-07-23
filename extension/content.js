@@ -397,7 +397,14 @@
 
   // ─── Renderers ────────────────────────────────────────────────────────────
 
-  let activeFilters = { quality: "all", cachedOnly: false };
+  let activeFilters = { quality: "all", cachedOnly: false, playerPref: "auto" };
+
+  async function loadPlayerPref() {
+    const res = await browser.storage.local.get("player_preference");
+    if (res && res.player_preference) {
+      activeFilters.playerPref = res.player_preference;
+    }
+  }
 
   function getFilteredStreams() {
     let filtered = currentStreams;
@@ -410,7 +417,8 @@
     return filtered;
   }
 
-  function renderStreams() {
+  async function renderStreams() {
+    await loadPlayerPref();
     let html = "";
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
@@ -434,6 +442,15 @@
       html += `<button class="torbox-filter-btn ${active}" data-filter-quality="${q}">${label}</button>`;
     });
     html += `</div>`;
+
+    html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Player</span>`;
+    ["auto", "browser", "mpv"].forEach(p => {
+      const label = p === "auto" ? "Auto" : p === "browser" ? "Browser" : "MPV";
+      const active = activeFilters.playerPref === p ? "active" : "";
+      html += `<button class="torbox-filter-btn ${active}" data-filter-player="${p}">${label}</button>`;
+    });
+    html += `</div>`;
+
     html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Status</span>`;
     html += `<button class="torbox-filter-btn ${activeFilters.cachedOnly ? 'active' : ''}" data-filter-cached="true">Cached Only (${cachedCount})</button>`;
     html += `</div></div>`;
@@ -462,12 +479,20 @@
 
     const epBtn = document.getElementById("torbox-ep-go");
     if (epBtn) {
-      epBtn.addEventListener("click", () => { activeFilters = { quality: "all", cachedOnly: false }; fetchStreams(); });
+      epBtn.addEventListener("click", () => { activeFilters.quality = "all"; activeFilters.cachedOnly = false; fetchStreams(); });
     }
 
     document.querySelectorAll("[data-filter-quality]").forEach(btn => {
       btn.addEventListener("click", () => {
         activeFilters.quality = btn.dataset.filterQuality;
+        renderStreams();
+      });
+    });
+    document.querySelectorAll("[data-filter-player]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const pref = btn.dataset.filterPlayer;
+        activeFilters.playerPref = pref;
+        await browser.storage.local.set({ player_preference: pref });
         renderStreams();
       });
     });
@@ -529,26 +554,47 @@
       setModalBody(`
         <div class="torbox-success">
           <p style="font-size:28px;margin-bottom:8px;">🎬</p>
-          <p><strong>Playing in new tab!</strong></p>
+          <p><strong>Playing in Browser Tab!</strong></p>
           <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
         </div>
         <div style="text-align:center;">
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">Open in MPV</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
         </div>
       `);
+      document.getElementById("torbox-try-mpv-btn").addEventListener("click", async () => {
+        const mpvBtn = document.getElementById("torbox-try-mpv-btn");
+        mpvBtn.textContent = "Launching MPV...";
+        const resp = await browser.runtime.sendMessage({ type: "TRY_MPV", url: data.url });
+        if (resp && resp.success) {
+          mpvBtn.textContent = "Launched in MPV! 🍿";
+        } else {
+          alert("MPV helper script not installed or mpv binary missing. Run 'python3 helpers/install.py' to enable.");
+          mpvBtn.textContent = "Open in MPV";
+        }
+      });
     } else if (data.method === "mpv") {
       setModalBody(`
         <div class="torbox-success">
           <p style="font-size:28px;margin-bottom:8px;">🍿</p>
-          <p><strong>Now playing in mpv!</strong></p>
+          <p><strong>Playing in MPV!</strong></p>
           <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
         </div>
         <div style="text-align:center;">
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-browser-btn">Open in Browser Tab</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
         </div>
       `);
+      document.getElementById("torbox-try-browser-btn").addEventListener("click", async () => {
+        await browser.runtime.sendMessage({
+          type: "OPEN_PLAYER_TAB",
+          url: data.url,
+          title: data.file_name,
+          torrentId: data.torrent_id,
+        });
+      });
     } else {
       // URL only / fallback
       setModalBody(`

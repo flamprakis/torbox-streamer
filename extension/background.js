@@ -345,6 +345,15 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       browser.runtime.openOptionsPage();
       sendResponse({ success: true });
       return true;
+
+    case "OPEN_PLAYER_TAB":
+      const playerUrl = browser.runtime.getURL("player/player.html") +
+        `?url=${encodeURIComponent(msg.url)}` +
+        `&title=${encodeURIComponent(msg.title || "Stream")}` +
+        `&torrent_id=${msg.torrentId || ""}`;
+      browser.tabs.create({ url: playerUrl });
+      sendResponse({ success: true });
+      return true;
   }
 });
 
