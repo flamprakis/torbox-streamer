@@ -346,6 +346,11 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ success });
       });
       return true;
+
+    case "OPEN_OPTIONS":
+      browser.runtime.openOptionsPage();
+      sendResponse({ success: true });
+      return true;
   }
 });
 
