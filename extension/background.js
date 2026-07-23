@@ -88,5 +88,10 @@ browser.tabs.onRemoved.addListener((tabId) => {
   delete tabInfo[tabId];
 });
 
+// Toolbar icon click → open the modal in the active tab
+browser.browserAction.onClicked.addListener((tab) => {
+  browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {});
+});
+
 // Connect on startup
 connectNativeHost();

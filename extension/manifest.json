@@ -21,8 +21,7 @@
     "default_icon": {
       "48": "icons/icon-48.svg"
     },
-    "default_title": "TorBox Streamer",
-    "default_popup": "popup/popup.html"
+    "default_title": "TorBox Streamer"
   },
 
   "background": {
