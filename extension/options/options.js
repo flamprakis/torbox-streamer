@@ -10,10 +10,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   const mpvPathEl = document.getElementById("mpv-path");
   const vlcPathEl = document.getElementById("vlc-path");
 
+  const qualityPrefEl = document.getElementById("quality-pref");
+
   // Load existing options
   const config = await browser.storage.local.get([
     "torbox_api_key",
     "player_preference",
+    "default_quality_filter",
     "mpv_path",
     "vlc_path",
     "torrentio_base_url",
@@ -22,6 +25,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (config.torbox_api_key) apiKeyEl.value = config.torbox_api_key;
   if (config.player_preference) playerPrefEl.value = config.player_preference;
+  if (config.default_quality_filter) qualityPrefEl.value = config.default_quality_filter;
   if (config.mpv_path) mpvPathEl.value = config.mpv_path;
   if (config.vlc_path) vlcPathEl.value = config.vlc_path;
   torrentioUrlEl.value = config.torrentio_base_url || "https://torrentio.strem.fun";
@@ -40,6 +44,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   saveBtnEl.addEventListener("click", async () => {
     const key = apiKeyEl.value.trim();
     const pref = playerPrefEl.value;
+    const qualPref = qualityPrefEl.value;
     const mpvPath = mpvPathEl.value.trim();
     const vlcPath = vlcPathEl.value.trim();
     const url = torrentioUrlEl.value.trim() || "https://torrentio.strem.fun";
@@ -48,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     await browser.storage.local.set({
       torbox_api_key: key,
       player_preference: pref,
+      default_quality_filter: qualPref,
       mpv_path: mpvPath,
       vlc_path: vlcPath,
       torrentio_base_url: url,

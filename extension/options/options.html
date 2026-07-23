@@ -47,6 +47,17 @@
     </div>
 
     <div class="field">
+      <label for="quality-pref">Default Quality Filter</label>
+      <select id="quality-pref">
+        <option value="all">All Qualities</option>
+        <option value="4K">4K / 2160p Only</option>
+        <option value="1080p">1080p Only</option>
+        <option value="720p">720p Only</option>
+        <option value="480p">480p / SD Only</option>
+      </select>
+    </div>
+
+    <div class="field">
       <label for="max-results">Max Results</label>
       <input type="number" id="max-results" min="5" max="100" value="20">
     </div>
@@ -63,7 +74,10 @@
       <p>To launch streams in external MPV or VLC desktop players, run the 1-click setup installer (no Python needed):</p>
       <code style="display:block;margin:6px 0;">Windows: Double-click helpers/install.bat</code>
       <code style="display:block;margin:6px 0;">Linux / macOS: ./helpers/install.sh</code>
-      <p style="margin-top:8px;"><a href="https://github.com/flamprakis/torbox-streamer#optional-enable-mpv--vlc-external-launching" target="_blank" style="color:#00adb5;text-decoration:underline;">View Download & Setup Guide on GitHub &rarr;</a></p>
+      <div style="margin-top:12px;display:flex;gap:16px;flex-wrap:wrap;">
+        <a href="https://github.com/flamprakis/torbox-streamer/releases/latest" target="_blank" style="color:#00adb5;text-decoration:underline;font-weight:600;">📦 Download Latest Release on GitHub &rarr;</a>
+        <a href="https://github.com/flamprakis/torbox-streamer#optional-enable-mpv--vlc-external-launching" target="_blank" style="color:#00adb5;text-decoration:underline;">📖 View Setup & Helper Guide on GitHub &rarr;</a>
+      </div>
     </div>
   </div>
 

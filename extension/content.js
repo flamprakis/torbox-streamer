@@ -442,9 +442,12 @@
   let activeFilters = { quality: "all", cachedOnly: false, playerPref: "auto" };
 
   async function loadPlayerPref() {
-    const res = await browser.storage.local.get("player_preference");
+    const res = await browser.storage.local.get(["player_preference", "default_quality_filter"]);
     if (res && res.player_preference) {
       activeFilters.playerPref = res.player_preference;
+    }
+    if (res && res.default_quality_filter) {
+      activeFilters.quality = res.default_quality_filter;
     }
   }
 
