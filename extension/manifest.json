@@ -45,6 +45,7 @@
     "activeTab",
     "storage",
     "*://www.imdb.com/*",
-    "*://m.imdb.com/*"
+    "*://m.imdb.com/*",
+    "*://torrentio.strem.fun/*"
   ]
 }
