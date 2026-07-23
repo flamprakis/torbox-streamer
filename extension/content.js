@@ -85,21 +85,24 @@
     const isMovie = url.includes("/movie/");
     if (!isTv && !isMovie) return null;
 
-    // Look for IMDb external link on TMDB page
-    const imdbLink = document.querySelector('a[href*="imdb.com/title/tt"]');
-    if (!imdbLink) return null;
+    // Look for IMDb external link on TMDB page across all links
+    let pageImdbId = null;
+    const imdbLinks = document.querySelectorAll('a[href*="imdb.com"]');
+    for (const a of imdbLinks) {
+      const match = a.href.match(/imdb\.com\/title\/(tt\d{7,})/);
+      if (match) {
+        pageImdbId = match[1];
+        break;
+      }
+    }
 
-    const imdbMatch = imdbLink.href.match(/imdb\.com\/title\/(tt\d{7,})/);
-    if (!imdbMatch) return null;
-
-    const pageImdbId = imdbMatch[1];
     let mediaType = isTv ? "series" : "movie";
     let title = "";
     let season = 1;
     let episode = 1;
 
-    const titleEl = document.querySelector("h2.title a") || document.querySelector(".header_info h2") || document.querySelector("h2");
-    if (titleEl) title = titleEl.textContent.trim();
+    const titleEl = document.querySelector("h2.title a") || document.querySelector(".header_info h2") || document.querySelector("h2") || document.querySelector("title");
+    if (titleEl) title = titleEl.textContent.replace(/(\(\d{4}\)|\n)/g, "").trim();
 
     // Check for season/episode in URL
     const epMatch = url.match(/\/season\/(\d+)\/episode\/(\d+)/i);
@@ -116,7 +119,7 @@
 
     const container = document.querySelector("ul.actions") || document.querySelector("div.action_bar") || document.querySelector(".header_info");
     if (!container) {
-      setTimeout(injectTmdbButton, 1000);
+      setTimeout(injectTmdbButton, 800);
       return;
     }
 
@@ -166,7 +169,12 @@
       if (svgFill) svgFill.setAttribute("fill", "#01b4e4");
       if (svgCircle) svgCircle.setAttribute("stroke", "#01b4e4");
     });
-    btn.addEventListener("click", () => openModal());
+    btn.addEventListener("click", () => {
+      if (!imdbInfo || !imdbInfo.imdbId) {
+        imdbInfo = extractTmdbInfo();
+      }
+      openModal();
+    });
 
     li.appendChild(btn);
 
@@ -178,19 +186,22 @@
   }
 
   function initTmdb() {
+    injectTmdbButton();
     imdbInfo = extractTmdbInfo();
-    if (imdbInfo) {
+    if (imdbInfo && imdbInfo.imdbId) {
       browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
-      injectTmdbButton();
     } else {
-      // Retry in case DOM links take a moment to load
-      setTimeout(() => {
+      let retries = 0;
+      const interval = setInterval(() => {
+        retries++;
         imdbInfo = extractTmdbInfo();
-        if (imdbInfo) {
-          browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
-          injectTmdbButton();
+        if ((imdbInfo && imdbInfo.imdbId) || retries > 10) {
+          clearInterval(interval);
+          if (imdbInfo && imdbInfo.imdbId) {
+            browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+          }
         }
-      }, 1200);
+      }, 500);
     }
   }
 
