@@ -38,6 +38,8 @@ set "ESCAPED_EXEC=%FINAL_EXEC:\=\\%"
 
 set "MANIFEST_PATH=%TARGET_DIR%\com.torbox_streamer.host.json"
 
+:: NOTE: Do NOT add "allowed_origins" — that is a Chrome-only field.
+:: Firefox/Waterfox schema validation silently rejects manifests with unknown properties.
 (
     echo {
     echo   "name": "com.torbox_streamer.host",
@@ -45,11 +47,7 @@ set "MANIFEST_PATH=%TARGET_DIR%\com.torbox_streamer.host.json"
     echo   "path": "!ESCAPED_EXEC!",
     echo   "type": "stdio",
     echo   "allowed_extensions": [
-    echo     "torbox-streamer@arena",
     echo     "torbox-streamer@flamprakis.com"
-    echo   ],
-    echo   "allowed_origins": [
-    echo     "chrome-extension://*/"
     echo   ]
     echo }
 ) > "%MANIFEST_PATH%"

@@ -19,7 +19,6 @@ MANIFEST_CONTENT = {
     "path": str(HOST_PATH),
     "type": "stdio",
     "allowed_extensions": [
-        "torbox-streamer@arena",
         "torbox-streamer@flamprakis.com"
     ]
 }

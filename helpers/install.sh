@@ -34,6 +34,8 @@ chmod +x "$FINAL_EXEC"
 echo "✅ Installed host executable to: $FINAL_EXEC"
 
 # Create manifest JSON
+# NOTE: Do NOT add "allowed_origins" — that is a Chrome-only field.
+# Firefox/Waterfox schema validation silently rejects manifests with unknown properties.
 MANIFEST_TMP=$(mktemp)
 cat <<EOF > "$MANIFEST_TMP"
 {
@@ -42,11 +44,7 @@ cat <<EOF > "$MANIFEST_TMP"
   "path": "$FINAL_EXEC",
   "type": "stdio",
   "allowed_extensions": [
-    "torbox-streamer@arena",
     "torbox-streamer@flamprakis.com"
-  ],
-  "allowed_origins": [
-    "chrome-extension://*/"
   ]
 }
 EOF
