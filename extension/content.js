@@ -462,8 +462,7 @@
     return filtered;
   }
 
-  async function renderStreams() {
-    await loadPlayerPref();
+  function renderStreams() {
     let html = "";
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
@@ -766,6 +765,7 @@
         }
 
         currentStreams = cacheResp.streams;
+        await loadPlayerPref();
         renderStreams();
       }
     } catch (e) {
