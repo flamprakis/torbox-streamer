@@ -24,32 +24,58 @@ MANIFEST_CONTENT = {
 }
 
 
-def install_firefox():
+def get_target_dirs():
+    dirs = []
     if sys.platform == "linux":
-        target_dir = Path.home() / ".mozilla" / "native-messaging-hosts"
+        base_home = Path.home()
+        dirs.extend([
+            base_home / ".mozilla" / "native-messaging-hosts",
+            base_home / ".waterfox" / "native-messaging-hosts",
+            base_home / ".waterfox-current" / "native-messaging-hosts",
+            base_home / ".librewolf" / "native-messaging-hosts",
+            base_home / ".config" / "google-chrome" / "NativeMessagingHosts",
+            base_home / ".config" / "chromium" / "NativeMessagingHosts",
+            base_home / ".config" / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts",
+        ])
     elif sys.platform == "darwin":
-        target_dir = Path.home() / "Library" / "Application Support" / "Mozilla" / "NativeMessagingHosts"
+        base_app_supp = Path.home() / "Library" / "Application Support"
+        dirs.extend([
+            base_app_supp / "Mozilla" / "NativeMessagingHosts",
+            base_app_supp / "Waterfox" / "NativeMessagingHosts",
+            base_app_supp / "Google" / "Chrome" / "NativeMessagingHosts",
+            base_app_supp / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts",
+        ])
     elif sys.platform == "win32":
-        target_dir = Path(os.environ.get("APPDATA", "")) / "Mozilla" / "NativeMessagingHosts"
-    else:
-        print(f"Unsupported platform: {sys.platform}")
-        return
+        app_data = Path(os.environ.get("APPDATA", ""))
+        dirs.extend([
+            app_data / "Mozilla" / "NativeMessagingHosts",
+            app_data / "Waterfox" / "NativeMessagingHosts",
+        ])
+    return dirs
 
-    target_dir.mkdir(parents=str(target_dir), exist_ok=True)
-    manifest_file = target_dir / f"{HOST_NAME}.json"
 
-    # Ensure executable permissions on script
+def install():
     HOST_PATH.chmod(0o755)
+    installed_any = False
 
-    with open(manifest_file, "w") as f:
-        json.dump(MANIFEST_CONTENT, f, indent=2)
+    for target_dir in get_target_dirs():
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            manifest_file = target_dir / f"{HOST_NAME}.json"
+            with open(manifest_file, "w") as f:
+                json.dump(MANIFEST_CONTENT, f, indent=2)
+            print(f"✅ Installed manifest at:\n   {manifest_file}")
+            installed_any = True
+        except Exception as e:
+            pass
 
-    print(f"✅ Installed Native Helper manifest for Firefox at:\n   {manifest_file}")
+    if not installed_any:
+        print("⚠️ Could not find or write to any standard browser native messaging directories.")
 
 
 def main():
-    print(f"Installing optional MPV launcher helper for TorBox Streamer...")
-    install_firefox()
+    print("Installing optional MPV launcher helper for TorBox Streamer (Firefox, Waterfox, Chrome, etc.)...")
+    install()
     print("Done! You can now select 'Always MPV' or use MPV playback in TorBox Streamer options.")
 
 
