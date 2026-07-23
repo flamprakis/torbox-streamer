@@ -328,11 +328,20 @@ function autoPickFile(files, fileIdx, season, episode) {
     const e = parseInt(episode);
     const patterns = [
       `s${String(s).padStart(2, "0")}e${String(e).padStart(2, "0")}`,
+      `s${String(s).padStart(2, "0")}.e${String(e).padStart(2, "0")}`,
+      `s${String(s).padStart(2, "0")}ep${String(e).padStart(2, "0")}`,
       `s${s}e${String(e).padStart(2, "0")}`,
+      `s${s}ep${String(e).padStart(2, "0")}`,
+      `s${s}e${e}`,
       `${String(s).padStart(2, "0")}x${String(e).padStart(2, "0")}`,
-      ` - ${e} `,
-      ` - ${String(e).padStart(2, "0")} `,
+      `${s}x${String(e).padStart(2, "0")}`,
+      `${s}x${e}`,
       `e${String(e).padStart(2, "0")}`,
+      `ep${String(e).padStart(2, "0")}`,
+      `ep ${String(e).padStart(2, "0")}`,
+      `ep ${e}`,
+      ` - ${String(e).padStart(2, "0")}`,
+      ` - ${e}`,
     ];
 
     for (const pattern of patterns) {

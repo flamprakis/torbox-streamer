@@ -92,7 +92,7 @@ async function fetchTorrentio(imdbId, season, episode) {
   const config = await getConfig();
   let path;
   if (season && episode) {
-    path = `stream/series/${imdbId}/${season}/${episode}.json`;
+    path = `stream/series/${imdbId}:${season}:${episode}.json`;
   } else {
     path = `stream/movie/${imdbId}.json`;
   }

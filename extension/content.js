@@ -20,23 +20,61 @@
     const match = url.match(/imdb\.com\/title\/(tt\d{7,})/);
     if (!match) return null;
 
-    const imdbId = match[1];
+    let pageImdbId = match[1];
     let mediaType = "movie";
     let title = "";
+    let season = 1;
+    let episode = 1;
 
     const titleEl =
       document.querySelector('[data-testid="hero__primary-text"]') ||
       document.querySelector("h1");
     if (titleEl) title = titleEl.textContent.trim();
 
-    const isSeries =
-      document.querySelector('[data-testid="hero-subnav-bar-season-episode-links"]') ||
-      document.querySelector("a[href*='/episodes/']") ||
-      url.includes("/episodes/") ||
-      (document.title && document.title.toLowerCase().includes("tv series"));
+    // 1. Check for Parent Series Link (Episode Page case)
+    const seriesLink =
+      document.querySelector('a[data-testid="hero-title-block__series-link"]') ||
+      document.querySelector('a[href*="/title/tt"][href*="/episodes"]');
 
-    if (isSeries) mediaType = "series";
-    return { imdbId, mediaType, title, url };
+    if (seriesLink) {
+      const parentMatch = seriesLink.href.match(/imdb\.com\/title\/(tt\d{7,})/);
+      if (parentMatch) {
+        mediaType = "series";
+        pageImdbId = parentMatch[1]; // Use parent series ID for Torrentio!
+      }
+    }
+
+    // 2. Season & Episode Detection from Subnav / Header text
+    const epLinksEl =
+      document.querySelector('[data-testid="hero-subnav-bar-season-episode-links"]') ||
+      document.querySelector('[data-testid="hero-subnav-bar-season-episode-link"]');
+
+    const bodyText = document.body ? document.body.innerText : "";
+    const pageText = (epLinksEl ? epLinksEl.textContent : "") + " " + (document.title || "");
+
+    const seMatch = pageText.match(/S(\d+)\s*\.\s*E(\d+)/i) ||
+                    pageText.match(/Season\s*(\d+)\s*,?\s*Episode\s*(\d+)/i) ||
+                    bodyText.match(/S(\d+)\s*\.\s*E(\d+)/i);
+
+    if (seMatch) {
+      mediaType = "series";
+      season = parseInt(seMatch[1]) || 1;
+      episode = parseInt(seMatch[2]) || 1;
+    }
+
+    // 3. Fallback Series Detection (Main Series page)
+    if (mediaType === "movie") {
+      const isSeries =
+        epLinksEl ||
+        document.querySelector("a[href*='/episodes/']") ||
+        url.includes("/episodes/") ||
+        (document.title && document.title.toLowerCase().includes("tv series")) ||
+        (document.title && document.title.toLowerCase().includes("tv mini series"));
+
+      if (isSeries) mediaType = "series";
+    }
+
+    return { imdbId: pageImdbId, mediaType, title, season, episode, url };
   }
 
   // ─── Button Injection ─────────────────────────────────────────────────────
@@ -331,6 +369,7 @@
 
   function openModal() {
     if (modalEl) return;
+    imdbInfo = extractImdbInfo();
     injectStyles();
 
     modalEl = document.createElement("div");
@@ -425,10 +464,12 @@
     let html = "";
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
+      const currentS = imdbInfo.season || 1;
+      const currentE = imdbInfo.episode || 1;
       html += `
         <div class="torbox-episode-picker">
-          <label>S</label><input id="torbox-season" type="number" min="1" value="1">
-          <label>E</label><input id="torbox-episode" type="number" min="1" value="1">
+          <label>S</label><input id="torbox-season" type="number" min="1" value="${currentS}">
+          <label>E</label><input id="torbox-episode" type="number" min="1" value="${currentE}">
           <button id="torbox-ep-go">Go</button>
         </div>
       `;
