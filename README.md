@@ -1,9 +1,10 @@
 # TorBox Streamer 🍿
 
-[![Version](https://img.shields.io/badge/version-2.0.0-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
+[![Version](https://img.shields.io/badge/version-2.0.1-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Browser Support](https://img.shields.io/badge/browsers-Firefox%20%7C%20Zen%20%7C%20Waterfox%20%7C%20Chrome%20%7C%20Brave-orange.svg)](#installation)
 [![TorBox](https://img.shields.io/badge/service-TorBox.app-teal.svg)](https://torbox.app)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/flamprakis)
 
 **Stream movies & TV shows directly from IMDb pages using Torrentio + TorBox in your browser or with MPV / VLC.**
 
@@ -119,6 +120,14 @@ torbox-streamer/
 - [ ] 🔌 **Multi-Debrid Integration**: Add support for additional debrid services (RealDebrid, AllDebrid, Premiumize) alongside TorBox.
 - [ ] 🌐 **Multi-Platform Support**: Expand site injection to TMDB, Trakt, Letterboxd, and AniList.
 - [ ] 🎨 **Custom Subtitle Styling**: Configurable font size, language preferences, and subtitle offset controls.
+
+---
+
+## ☕ Support Development
+
+If you find **TorBox Streamer** useful and want to support ongoing development (subtitles, multi-debrid, TMDB support):
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/flamprakis)
 
 ---
 
