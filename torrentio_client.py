@@ -103,15 +103,31 @@ class TorrentioClient:
         """Fetch and parse streams from a Torrentio endpoint."""
         url = f"{self.base_url}/{path}"
         try:
-            resp = self.session.get(url, timeout=15)
+            resp = self.session.get(url, timeout=10)
             resp.raise_for_status()
+
+            # Detect Cloudflare blocks (returns 200 with HTML challenge page)
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" in content_type or "cf-" in resp.text[:500].lower():
+                raise ValueError(
+                    "Torrentio blocked the request (Cloudflare). "
+                    "Try a different instance or add a config string like: "
+                    "https://torrentio.strem.fun/sort=qualitysize|qualityfilter=scr,cam"
+                )
+
             data = resp.json()
+        except requests.Timeout:
+            print("  ⚠ Torrentio request timed out (10s)")
+            raise ValueError("Torrentio timed out. The service may be down or blocking your connection.")
         except requests.RequestException as e:
             print(f"  ⚠ Torrentio request failed: {e}")
-            return []
-        except ValueError:
+            raise ValueError(f"Torrentio request failed: {e}")
+        except ValueError as e:
+            # Re-raise our custom ValueError, catch JSON parse errors
+            if "Torrentio" in str(e) or "Cloudflare" in str(e) or "timed out" in str(e):
+                raise
             print("  ⚠ Torrentio returned invalid JSON")
-            return []
+            raise ValueError("Torrentio returned an unexpected response (possibly a Cloudflare challenge).")
 
         streams = []
         for entry in data.get("streams", []):
