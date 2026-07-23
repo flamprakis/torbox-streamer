@@ -507,20 +507,44 @@
     if (!imdbInfo) return;
     setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Fetching streams from Torrentio...</p></div>');
 
-    const msg = { action: "get_streams", imdb_id: imdbInfo.imdbId };
+    const msg = { type: "FETCH_TORRENTIO", imdbId: imdbInfo.imdbId };
     if (imdbInfo.mediaType === "series") {
       const sEl = document.getElementById("torbox-season");
       const eEl = document.getElementById("torbox-episode");
       msg.season = sEl ? parseInt(sEl.value) || 1 : 1;
       msg.episode = eEl ? parseInt(eEl.value) || 1 : 1;
     }
-    sendNative(msg);
+
+    browser.runtime.sendMessage(msg).then((resp) => {
+      if (!resp) return;
+      if (resp.type === "TORRENTIO_ERROR") {
+        setModalBody(`
+          <div class="torbox-error">\u26a0 ${escapeHtml(resp.message)}</div>
+          <div style="text-align:center;margin-top:12px;">
+            <button class="torbox-btn torbox-btn-primary" id="torbox-retry-btn">Retry</button>
+          </div>
+        `);
+        document.getElementById("torbox-retry-btn").addEventListener("click", fetchStreams);
+        return;
+      }
+      if (resp.type === "TORRENTIO_RESULT") {
+        if (!resp.streams || resp.streams.length === 0) {
+          setModalBody('<div class="torbox-error">No streams found for this title.</div>');
+          return;
+        }
+        // Now check cache via native host
+        setModalBody(`<div class="torbox-loading"><div class="torbox-spinner"></div><p>Checking TorBox cache for ${resp.streams.length} streams...</p></div>`);
+        sendNative({ action: "check_cache", hashes: resp.streams.map(s => s.info_hash), streams: resp.streams });
+      }
+    }).catch((e) => {
+      setModalBody(`<div class="torbox-error">\u26a0 ${escapeHtml(e.message || "Communication error")}</div>`);
+    });
   }
 
   function pickStream(stream) {
     setModalBody(`<div class="torbox-loading"><div class="torbox-spinner"></div><p>${stream.cached ? "\u2705 Cached \u2014 adding torrent (instant)..." : "\u274c Not cached \u2014 downloading on TorBox..."}</p></div>`);
 
-    const msg = { action: "stream", hash: stream.info_hash, file_idx: stream.file_idx };
+    const msg = { action: "stream", hash: stream.info_hash, file_idx: stream.file_idx, is_cached: !!stream.cached };
     if (imdbInfo && imdbInfo.mediaType === "series") {
       const sEl = document.getElementById("torbox-season");
       const eEl = document.getElementById("torbox-episode");
