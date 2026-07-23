@@ -8,7 +8,47 @@ on:
       - 'v*'
 
 jobs:
-  build-and-release:
+  build-binaries:
+    name: Build Standalone Native Host (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: torbox-host.exe
+            binary_name: torbox-host.exe
+          - os: ubuntu-latest
+            artifact_name: torbox-host-linux
+            binary_name: torbox-host-linux
+          - os: macos-latest
+            artifact_name: torbox-host-macos
+            binary_name: torbox-host-macos
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyInstaller
+        run: python -m pip install pyinstaller
+
+      - name: Build Standalone Binary
+        run: |
+          pyinstaller --onefile --name ${{ matrix.binary_name }} helpers/native_host.py
+
+      - name: Upload Binary Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.binary_name }}
+
+  release:
+    name: Create GitHub Release
+    needs: build-binaries
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -25,12 +65,27 @@ jobs:
       - name: Build Extension Zip
         run: python3 package.py
 
+      - name: Download Binary Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release/
+          merge-multiple: true
+
+      - name: Organize Release Files
+        run: |
+          cp dist-release/* build/
+          ls -la build/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.0
-          name: TorBox Streamer v2.0.0
-          files: build/torbox-streamer-*.zip
+          tag_name: ${{ github.ref_name }}
+          name: TorBox Streamer ${{ github.ref_name }}
+          files: |
+            build/torbox-streamer-*.zip
+            build/torbox-host.exe
+            build/torbox-host-linux
+            build/torbox-host-macos
           draft: false
           prerelease: false
           generate_release_notes: true
