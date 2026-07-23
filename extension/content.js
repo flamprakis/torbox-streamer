@@ -618,7 +618,7 @@
         if (resp && resp.success) {
           mpvBtn.textContent = "Launched in MPV! 🍿";
         } else {
-          alert("Helper script not installed or MPV binary missing. Run 'python3 helpers/install.py' to enable.");
+          alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
           mpvBtn.textContent = "Open in MPV";
         }
       });
@@ -629,7 +629,7 @@
         if (resp && resp.success) {
           vlcBtn.textContent = "Launched in VLC! 🍿";
         } else {
-          alert("Helper script not installed or VLC binary missing. Run 'python3 helpers/install.py' to enable.");
+          alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
           vlcBtn.textContent = "Open in VLC";
         }
       });

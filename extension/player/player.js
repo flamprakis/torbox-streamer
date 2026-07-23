@@ -41,7 +41,7 @@ document.addEventListener("DOMContentLoaded", () => {
       video.pause();
     } else {
       btnMpv.textContent = "MPV helper not found";
-      alert("Helper script not installed or MPV binary missing. Run 'python3 helpers/install.py' to enable.");
+      alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
     }
     setTimeout(() => btnMpv.textContent = "Try in MPV", 3000);
   });
@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
         video.pause();
       } else {
         btnVlc.textContent = "VLC helper not found";
-        alert("Helper script not installed or VLC binary missing. Run 'python3 helpers/install.py' to enable.");
+        alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
       }
       setTimeout(() => btnVlc.textContent = "Try in VLC", 3000);
     });
