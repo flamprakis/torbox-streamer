@@ -77,6 +77,123 @@
     return { imdbId: pageImdbId, mediaType, title, season, episode, url };
   }
 
+  // ─── TMDB Detection & Extraction ──────────────────────────────────────────
+
+  function extractTmdbInfo() {
+    const url = window.location.href;
+    const isTv = url.includes("/tv/");
+    const isMovie = url.includes("/movie/");
+    if (!isTv && !isMovie) return null;
+
+    // Look for IMDb external link on TMDB page
+    const imdbLink = document.querySelector('a[href*="imdb.com/title/tt"]');
+    if (!imdbLink) return null;
+
+    const imdbMatch = imdbLink.href.match(/imdb\.com\/title\/(tt\d{7,})/);
+    if (!imdbMatch) return null;
+
+    const pageImdbId = imdbMatch[1];
+    let mediaType = isTv ? "series" : "movie";
+    let title = "";
+    let season = 1;
+    let episode = 1;
+
+    const titleEl = document.querySelector("h2.title a") || document.querySelector(".header_info h2") || document.querySelector("h2");
+    if (titleEl) title = titleEl.textContent.trim();
+
+    // Check for season/episode in URL
+    const epMatch = url.match(/\/season\/(\d+)\/episode\/(\d+)/i);
+    if (epMatch) {
+      season = parseInt(epMatch[1]) || 1;
+      episode = parseInt(epMatch[2]) || 1;
+    }
+
+    return { imdbId: pageImdbId, mediaType, title, season, episode, url };
+  }
+
+  function injectTmdbButton() {
+    if (document.getElementById("torbox-play-btn")) return;
+
+    const container = document.querySelector("ul.actions") || document.querySelector("div.action_bar") || document.querySelector(".header_info");
+    if (!container) {
+      setTimeout(injectTmdbButton, 1000);
+      return;
+    }
+
+    const li = document.createElement("li");
+    li.className = "chart torbox-action-item";
+    li.style.cssText = "display:inline-flex;align-items:center;margin-left:10px;";
+
+    const btn = document.createElement("button");
+    btn.id = "torbox-play-btn";
+    btn.type = "button";
+    btn.title = "Stream with TorBox";
+    btn.innerHTML = `
+      <span style="display:inline-flex;align-items:center;gap:6px;">
+        <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+          <circle cx="8" cy="8" r="7" stroke="#01b4e4" stroke-width="1.5"/>
+          <polygon points="6.5,5 6.5,11 11.5,8" fill="#01b4e4"/>
+        </svg>
+        <span style="font-weight:700;letter-spacing:0.5px;">Stream with TorBox</span>
+      </span>
+    `;
+    btn.style.cssText = `
+      background: rgba(1, 180, 228, 0.15);
+      border: 1px solid #01b4e4;
+      color: #01b4e4;
+      border-radius: 20px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: Source Sans Pro, Arial, sans-serif;
+      transition: all 0.2s ease-in-out;
+      display: inline-flex;
+      align-items: center;
+    `;
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "#01b4e4";
+      btn.style.color = "#0d253f";
+      const svgFill = btn.querySelector("polygon");
+      const svgCircle = btn.querySelector("circle");
+      if (svgFill) svgFill.setAttribute("fill", "#0d253f");
+      if (svgCircle) svgCircle.setAttribute("stroke", "#0d253f");
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "rgba(1, 180, 228, 0.15)";
+      btn.style.color = "#01b4e4";
+      const svgFill = btn.querySelector("polygon");
+      const svgCircle = btn.querySelector("circle");
+      if (svgFill) svgFill.setAttribute("fill", "#01b4e4");
+      if (svgCircle) svgCircle.setAttribute("stroke", "#01b4e4");
+    });
+    btn.addEventListener("click", () => openModal());
+
+    li.appendChild(btn);
+
+    if (container.tagName === "UL") {
+      container.appendChild(li);
+    } else {
+      container.appendChild(li);
+    }
+  }
+
+  function initTmdb() {
+    imdbInfo = extractTmdbInfo();
+    if (imdbInfo) {
+      browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+      injectTmdbButton();
+    } else {
+      // Retry in case DOM links take a moment to load
+      setTimeout(() => {
+        imdbInfo = extractTmdbInfo();
+        if (imdbInfo) {
+          browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+          injectTmdbButton();
+        }
+      }, 1200);
+    }
+  }
+
   // ─── Button Injection ─────────────────────────────────────────────────────
 
   function injectButton() {
@@ -834,18 +951,26 @@
   // ─── Init ─────────────────────────────────────────────────────────────────
 
   function init() {
-    imdbInfo = extractImdbInfo();
-    if (!imdbInfo) return;
-
-    browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
-    injectButton();
+    if (window.location.hostname.includes("themoviedb.org")) {
+      initTmdb();
+    } else {
+      imdbInfo = extractImdbInfo();
+      if (imdbInfo) {
+        browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+        injectButton();
+      }
+    }
 
     let lastUrl = location.href;
     new MutationObserver(() => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
-        imdbInfo = extractImdbInfo();
-        if (imdbInfo) setTimeout(injectButton, 500);
+        if (window.location.hostname.includes("themoviedb.org")) {
+          initTmdb();
+        } else {
+          imdbInfo = extractImdbInfo();
+          if (imdbInfo) setTimeout(injectButton, 500);
+        }
       }
     }).observe(document.body, { childList: true, subtree: true });
   }

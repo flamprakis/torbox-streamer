@@ -43,7 +43,9 @@
     {
       "matches": [
         "*://www.imdb.com/title/*",
-        "*://m.imdb.com/title/*"
+        "*://m.imdb.com/title/*",
+        "*://www.themoviedb.org/movie/*",
+        "*://www.themoviedb.org/tv/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"
@@ -56,6 +58,7 @@
     "storage",
     "*://www.imdb.com/*",
     "*://m.imdb.com/*",
+    "*://www.themoviedb.org/*",
     "*://torrentio.strem.fun/*",
     "*://api.torbox.app/*"
   ],
