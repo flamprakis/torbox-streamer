@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TorBox Streamer Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="container">
+    <h2>TorBox Streamer Settings</h2>
+
+    <div class="field">
+      <label for="api-key">TorBox API Key</label>
+      <div class="input-row">
+        <input type="password" id="api-key" placeholder="Enter your TorBox API Key">
+        <button id="toggle-key" class="btn-sec">Show</button>
+      </div>
+      <small>Get your API key from <a href="https://torbox.app/settings" target="_blank">torbox.app/settings</a>.</small>
+    </div>
+
+    <div class="field">
+      <label for="player-pref">Preferred Player</label>
+      <select id="player-pref">
+        <option value="auto">Auto (Browser Tab for MP4/WebM, MPV for MKV if installed)</option>
+        <option value="browser">Always Browser Tab</option>
+        <option value="mpv">Always MPV (Requires native helper)</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="torrentio-url">Torrentio Base URL</label>
+      <input type="text" id="torrentio-url" placeholder="https://torrentio.strem.fun">
+      <small>Change this if the default Torrentio instance is blocked by Cloudflare.</small>
+    </div>
+
+    <div class="field">
+      <label for="max-results">Max Results</label>
+      <input type="number" id="max-results" min="5" max="100" value="20">
+    </div>
+
+    <div class="actions">
+      <button id="save-btn" class="btn-prim">Save Settings</button>
+      <span id="status-msg"></span>
+    </div>
+
+    <hr>
+
+    <div class="helper-box">
+      <h3>🍿 Optional: Launch directly in MPV</h3>
+      <p>To launch streams in external MPV player directly, run the one-line setup helper script on your system:</p>
+      <code>python3 helpers/install.py</code>
+      <small>No separate desktop software required. Works out of the box with python3 & mpv.</small>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

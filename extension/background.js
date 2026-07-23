@@ -1,70 +1,88 @@
 /**
- * TorBox Streamer — Background Script
- * - Fetches Torrentio streams (from browser, bypasses Cloudflare)
- * - Routes TorBox API calls to native host
- * - Uses tab-targeted messaging (not broadcast) for reliability
+ * TorBox Streamer — Background Script (v2 Pure Extension)
+ * - Fetches Torrentio streams
+ * - Executes TorBox API calls directly via torbox_api.js
+ * - Handles optional native helper for launching mpv
+ * - Routes playback (browser tab vs mpv helper)
  */
 
 const NATIVE_HOST = "com.torbox_streamer.host";
 let nativePort = null;
-let isConnected = false;
+let isNativeConnected = false;
 
 const tabInfo = {};
-let activeTabId = null; // Track which tab is using the native host
 let torrentioBaseUrl = "https://torrentio.strem.fun";
 
-// Load saved Torrentio base URL from storage
-browser.storage.local.get("torrentio_base_url").then(stored => {
-  if (stored.torrentio_base_url) torrentioBaseUrl = stored.torrentio_base_url;
-}).catch(() => {});
+// ─── Settings & Storage ────────────────────────────────────────────────────
 
-// ─── Native Messaging ───────────────────────────────────────────────────────
+async function getConfig() {
+  const stored = await browser.storage.local.get([
+    "torbox_api_key",
+    "player_preference",
+    "torrentio_base_url",
+    "max_results",
+  ]);
+  return {
+    apiKey: stored.torbox_api_key || "",
+    playerPref: stored.player_preference || "auto", // "auto", "browser", "mpv"
+    torrentioBaseUrl: stored.torrentio_base_url || "https://torrentio.strem.fun",
+    maxResults: stored.max_results || 20,
+  };
+}
 
-function connectNativeHost() {
+// ─── Optional Native Helper for mpv ────────────────────────────────────────
+
+function connectNativeHelper() {
   if (nativePort) {
     try { nativePort.disconnect(); } catch (e) {}
   }
 
-  nativePort = browser.runtime.connectNative(NATIVE_HOST);
-  isConnected = true;
-
-  nativePort.onMessage.addListener((msg) => {
-    // Send response back to the specific tab that made the request
-    if (activeTabId) {
-      browser.tabs.sendMessage(activeTabId, { type: "NATIVE_RESPONSE", data: msg })
-        .catch((e) => console.warn("tabs.sendMessage failed:", e));
-    }
-  });
-
-  nativePort.onDisconnect.addListener((port) => {
-    isConnected = false;
-    const error = port.error ? port.error.message : "unknown";
-    console.warn(`Native host disconnected: ${error}`);
-    if (activeTabId) {
-      browser.tabs.sendMessage(activeTabId, {
-        type: "NATIVE_ERROR",
-        data: { message: `Native host error: ${error}` },
-      }).catch(() => {});
-    }
-  });
-}
-
-function sendToNative(msg, tabId) {
-  activeTabId = tabId; // Remember which tab to respond to
-  if (!isConnected || !nativePort) {
-    connectNativeHost();
-  }
   try {
-    nativePort.postMessage(msg);
+    nativePort = browser.runtime.connectNative(NATIVE_HOST);
+    isNativeConnected = true;
+
+    nativePort.onDisconnect.addListener(() => {
+      isNativeConnected = false;
+      nativePort = null;
+    });
   } catch (e) {
-    connectNativeHost();
-    nativePort.postMessage(msg);
+    isNativeConnected = false;
+    nativePort = null;
   }
 }
 
-// ─── Torrentio Fetch (browser-side, passes Cloudflare) ─────────────────────
+async function tryLaunchMpv(streamUrl) {
+  return new Promise((resolve) => {
+    try {
+      const port = browser.runtime.connectNative(NATIVE_HOST);
+      let resolved = false;
+
+      port.onMessage.addListener((msg) => {
+        if (!resolved) {
+          resolved = true;
+          port.disconnect();
+          resolve(msg && msg.status === "ok");
+        }
+      });
+
+      port.onDisconnect.addListener(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      });
+
+      port.postMessage({ action: "launch_mpv", url: streamUrl });
+    } catch (e) {
+      resolve(false);
+    }
+  });
+}
+
+// ─── Torrentio Fetch ───────────────────────────────────────────────────────
 
 async function fetchTorrentio(imdbId, season, episode) {
+  const config = await getConfig();
   let path;
   if (season && episode) {
     path = `stream/series/${imdbId}/${season}/${episode}.json`;
@@ -72,8 +90,7 @@ async function fetchTorrentio(imdbId, season, episode) {
     path = `stream/movie/${imdbId}.json`;
   }
 
-  const baseUrl = torrentioBaseUrl;
-  const url = `${baseUrl}/${path}`;
+  const url = `${config.torrentioBaseUrl}/${path}`;
 
   try {
     const resp = await fetch(url, {
@@ -86,15 +103,14 @@ async function fetchTorrentio(imdbId, season, episode) {
 
     const text = await resp.text();
 
-    // Detect Cloudflare block
     if (text.includes("<!DOCTYPE") || text.includes("cf-error") || text.includes("Cloudflare")) {
-      throw new Error("Torrentio blocked by Cloudflare. Try another instance.");
+      throw new Error("Torrentio blocked by Cloudflare. Try updating Torrentio base URL in options.");
     }
 
     const data = JSON.parse(text);
     const streams = (data.streams || []).filter(s => s.infoHash);
 
-    return streams.map((s, idx) => {
+    return streams.slice(0, config.maxResults).map((s, idx) => {
       const fullText = `${s.name || ""} ${s.title || ""}`;
       return {
         info_hash: s.infoHash.toLowerCase(),
@@ -104,7 +120,7 @@ async function fetchTorrentio(imdbId, season, episode) {
         size_bytes: parseSize(fullText),
         size_human: parseSizeHuman(fullText),
         seeders: parseSeeders(fullText),
-        original_index: idx, // Preserve Torrentio's ranking order
+        original_index: idx,
       };
     });
   } catch (e) {
@@ -146,9 +162,104 @@ function parseSeeders(text) {
   return null;
 }
 
-// ─── Message Routing ────────────────────────────────────────────────────────
+// ─── High Level Streaming Logic ─────────────────────────────────────────────
 
-browser.runtime.onMessage.addListener((msg, sender) => {
+async function handleStreamRequest(data, senderTabId, sendProgress) {
+  const config = await getConfig();
+  if (!config.apiKey) {
+    throw new Error("TorBox API Key is missing. Please set it in the extension settings.");
+  }
+
+  const { hash, file_idx, is_cached, season, episode } = data;
+  const magnet = `magnet:?xt=urn:btih:${hash}`;
+
+  sendProgress("Adding torrent to TorBox...");
+  const torrentId = await torboxCreateTorrent(config.apiKey, magnet);
+  if (!torrentId) {
+    throw new Error("Failed to add torrent to TorBox.");
+  }
+
+  // Poll for ready state
+  const pollInterval = is_cached ? 1 : 3;
+  const timeout = is_cached ? 30 : 300;
+
+  sendProgress(is_cached ? "Checking torrent status..." : "Downloading torrent on TorBox...");
+
+  const torrent = await torboxWaitForReady(config.apiKey, torrentId, {
+    timeout,
+    pollInterval,
+    onProgress: (t) => {
+      const pct = Math.floor((t.progress || 0) * 100);
+      sendProgress(`Downloading: ${t.state} (${pct}%)`);
+    },
+  });
+
+  if (!torrent) {
+    throw new Error("Timed out waiting for torrent download on TorBox.");
+  }
+
+  // Pick file
+  let selectedFile = null;
+  if (file_idx != null) {
+    selectedFile = torrent.files.find(f => f.id === file_idx);
+  }
+  if (!selectedFile) {
+    selectedFile = autoPickFile(torrent.files, file_idx, season, episode);
+  }
+
+  if (!selectedFile) {
+    // Return file list for manual picking if auto-pick returned nothing
+    return {
+      action: "pick_file",
+      torrent_id: torrentId,
+      files: torrent.files,
+    };
+  }
+
+  // Get stream URL
+  const streamUrl = torboxGetDownloadUrl(config.apiKey, torrentId, selectedFile.id);
+  const playableInBrowser = isBrowserPlayable(selectedFile.name);
+
+  let launchMethod = "browser"; // default
+
+  if (config.playerPref === "mpv") {
+    const mpvSuccess = await tryLaunchMpv(streamUrl);
+    launchMethod = mpvSuccess ? "mpv" : "url_only";
+  } else if (config.playerPref === "browser") {
+    launchMethod = "browser";
+  } else {
+    // Auto mode: try mpv for non-browser playable formats or try native helper first
+    if (!playableInBrowser) {
+      const mpvSuccess = await tryLaunchMpv(streamUrl);
+      launchMethod = mpvSuccess ? "mpv" : "browser";
+    } else {
+      launchMethod = "browser";
+    }
+  }
+
+  if (launchMethod === "browser") {
+    // Open in internal player tab
+    const playerUrl = browser.runtime.getURL("player/player.html") +
+      `?url=${encodeURIComponent(streamUrl)}` +
+      `&title=${encodeURIComponent(selectedFile.name)}` +
+      `&torrent_id=${torrentId}`;
+    await browser.tabs.create({ url: playerUrl });
+  }
+
+  return {
+    action: "streaming",
+    method: launchMethod,
+    url: streamUrl,
+    torrent_id: torrentId,
+    file_name: selectedFile.name,
+    file_size: selectedFile.size_human,
+    is_playable_browser: playableInBrowser,
+  };
+}
+
+// ─── Message Listener ───────────────────────────────────────────────────────
+
+browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const senderTabId = sender.tab ? sender.tab.id : null;
 
   switch (msg.type) {
@@ -157,37 +268,95 @@ browser.runtime.onMessage.addListener((msg, sender) => {
       break;
 
     case "GET_TAB_INFO":
-      return browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-        return tabs[0] ? (tabInfo[tabs[0].id] || null) : null;
+      browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+        sendResponse(tabs[0] ? (tabInfo[tabs[0].id] || null) : null);
       });
+      return true;
 
     case "FETCH_TORRENTIO":
-      // Content script wants Torrentio data — fetch from browser context
-      return fetchTorrentio(msg.imdbId, msg.season, msg.episode)
-        .then(streams => ({ type: "TORRENTIO_RESULT", streams }))
-        .catch(e => ({ type: "TORRENTIO_ERROR", message: e.message }));
+      fetchTorrentio(msg.imdbId, msg.season, msg.episode)
+        .then(streams => sendResponse({ type: "TORRENTIO_RESULT", streams }))
+        .catch(e => sendResponse({ type: "TORRENTIO_ERROR", message: e.message }));
+      return true;
 
-    case "NATIVE_REQUEST":
-      // Forward to native host, remembering which tab to respond to
-      sendToNative(msg.data, senderTabId);
-      break;
+    case "CHECK_CACHE":
+      (async () => {
+        try {
+          const config = await getConfig();
+          if (!config.apiKey) {
+            sendResponse({ type: "CACHE_ERROR", message: "TorBox API key missing. Please set it in options." });
+            return;
+          }
+          const cacheMap = await torboxCheckCached(config.apiKey, msg.hashes);
+          const updatedStreams = msg.streams.map(s => ({
+            ...s,
+            cached: !!cacheMap[s.info_hash],
+          }));
+          sendResponse({ type: "CACHE_RESULT", streams: updatedStreams });
+        } catch (e) {
+          sendResponse({ type: "CACHE_ERROR", message: e.message });
+        }
+      })();
+      return true;
 
-    case "CONNECT_NATIVE":
-      connectNativeHost();
-      break;
+    case "START_STREAM":
+      (async () => {
+        try {
+          const res = await handleStreamRequest(msg.data, senderTabId, (progressMsg) => {
+            if (senderTabId) {
+              browser.tabs.sendMessage(senderTabId, {
+                type: "STREAM_PROGRESS",
+                message: progressMsg,
+              }).catch(() => {});
+            }
+          });
+          sendResponse({ type: "STREAM_RESULT", data: res });
+        } catch (e) {
+          sendResponse({ type: "STREAM_ERROR", message: e.message });
+        }
+      })();
+      return true;
+
+    case "PICK_FILE":
+      (async () => {
+        try {
+          const config = await getConfig();
+          const streamUrl = torboxGetDownloadUrl(config.apiKey, msg.torrentId, msg.fileId);
+          sendResponse({ type: "PICK_FILE_RESULT", url: streamUrl });
+        } catch (e) {
+          sendResponse({ type: "PICK_FILE_ERROR", message: e.message });
+        }
+      })();
+      return true;
+
+    case "DELETE_TORRENT":
+      (async () => {
+        try {
+          const config = await getConfig();
+          const success = await torboxDeleteTorrent(config.apiKey, msg.torrentId);
+          sendResponse({ type: "DELETE_RESULT", success });
+        } catch (e) {
+          sendResponse({ type: "DELETE_ERROR", message: e.message });
+        }
+      })();
+      return true;
+
+    case "TRY_MPV":
+      tryLaunchMpv(msg.url).then(success => {
+        sendResponse({ success });
+      });
+      return true;
   }
 });
 
-// Toolbar icon click
+// Toolbar icon click → open options page or trigger modal
 browser.browserAction.onClicked.addListener((tab) => {
-  browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {});
+  browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {
+    browser.runtime.openOptionsPage();
+  });
 });
 
-// Cleanup
+// Cleanup tab info on close
 browser.tabs.onRemoved.addListener((tabId) => {
   delete tabInfo[tabId];
-  if (activeTabId === tabId) activeTabId = null;
 });
-
-// Startup
-connectNativeHost();

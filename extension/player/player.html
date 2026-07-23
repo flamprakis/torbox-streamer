@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>TorBox Streamer Player</title>
+  <link rel="stylesheet" href="player.css">
+</head>
+<body>
+  <div class="player-header">
+    <span id="title" class="title">Loading stream...</span>
+    <div class="header-actions">
+      <button id="btn-mpv" class="btn">Try in MPV</button>
+      <button id="btn-copy" class="btn">Copy Stream URL</button>
+      <button id="btn-delete" class="btn btn-danger">Delete Torrent</button>
+    </div>
+  </div>
+
+  <div class="video-container">
+    <video id="video-player" controls autoplay preload="metadata">
+      Your browser does not support HTML5 video playback.
+    </video>
+  </div>
+
+  <script src="player.js"></script>
+</body>
+</html>

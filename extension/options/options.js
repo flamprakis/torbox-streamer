@@ -1,0 +1,52 @@
+document.addEventListener("DOMContentLoaded", async () => {
+  const apiKeyEl = document.getElementById("api-key");
+  const toggleKeyEl = document.getElementById("toggle-key");
+  const playerPrefEl = document.getElementById("player-pref");
+  const torrentioUrlEl = document.getElementById("torrentio-url");
+  const maxResultsEl = document.getElementById("max-results");
+  const saveBtnEl = document.getElementById("save-btn");
+  const statusMsgEl = document.getElementById("status-msg");
+
+  // Load existing options
+  const config = await browser.storage.local.get([
+    "torbox_api_key",
+    "player_preference",
+    "torrentio_base_url",
+    "max_results",
+  ]);
+
+  if (config.torbox_api_key) apiKeyEl.value = config.torbox_api_key;
+  if (config.player_preference) playerPrefEl.value = config.player_preference;
+  torrentioUrlEl.value = config.torrentio_base_url || "https://torrentio.strem.fun";
+  maxResultsEl.value = config.max_results || 20;
+
+  toggleKeyEl.addEventListener("click", () => {
+    if (apiKeyEl.type === "password") {
+      apiKeyEl.type = "text";
+      toggleKeyEl.textContent = "Hide";
+    } else {
+      apiKeyEl.type = "password";
+      toggleKeyEl.textContent = "Show";
+    }
+  });
+
+  saveBtnEl.addEventListener("click", async () => {
+    const key = apiKeyEl.value.trim();
+    const pref = playerPrefEl.value;
+    const url = torrentioUrlEl.value.trim() || "https://torrentio.strem.fun";
+    const maxRes = parseInt(maxResultsEl.value) || 20;
+
+    await browser.storage.local.set({
+      torbox_api_key: key,
+      player_preference: pref,
+      torrentio_base_url: url,
+      max_results: maxRes,
+    });
+
+    statusMsgEl.textContent = "Saved!";
+    statusMsgEl.className = "success";
+    setTimeout(() => {
+      statusMsgEl.textContent = "";
+    }, 2500);
+  });
+});
