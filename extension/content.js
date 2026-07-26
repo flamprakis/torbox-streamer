@@ -85,9 +85,45 @@
     const isMovie = url.includes("/movie/");
     if (!isTv && !isMovie) return null;
 
-    // Look for IMDb external link on TMDB page across all links & page HTML
+    let mediaType = isTv ? "series" : "movie";
+    let title = "";
+    let year = null;
+    let season = 1;
+    let episode = 1;
+    let tmdbId = null;
     let pageImdbId = null;
-    const imdbLinks = document.querySelectorAll('a[href*="imdb"]');
+
+    // 1. Extract TMDB numeric ID from URL (always available)
+    const tmdbMatch = url.match(/\/(movie|tv)\/(\d+)/);
+    if (tmdbMatch) tmdbId = tmdbMatch[2];
+
+    // 2. Parse <title> tag — most reliable source for title + year
+    //    Format: "Inception (2010) — The Movie Database (TMDB)"
+    //    TV:     "Breaking Bad (TV Series 2008-2013) — The Movie Database (TMDB)"
+    const pageTitle = document.title || "";
+    const titleMatch = pageTitle.match(/^(.+?)\s*\((?:TV\s*(?:Series|Mini\s*Series)\s*)?(\d{4})/);
+    if (titleMatch) {
+      title = titleMatch[1].trim();
+      year = parseInt(titleMatch[2]);
+    }
+
+    // 3. Fallback: try JSON-LD schema (server-rendered, has movie name)
+    if (!title) {
+      const ldScripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const script of ldScripts) {
+        try {
+          const ld = JSON.parse(script.textContent);
+          if (ld["@type"] === "Movie" || ld["@type"] === "TVSeries") {
+            title = ld.name || "";
+            if (ld.dateCreated) year = parseInt(ld.dateCreated.slice(0, 4));
+            break;
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 4. Try to find IMDb link in DOM (may appear after TMDB's JS loads social links)
+    const imdbLinks = document.querySelectorAll('a[href*="imdb.com/title/tt"]');
     for (const a of imdbLinks) {
       const match = (a.href || "").match(/(tt\d{7,})/);
       if (match) {
@@ -96,34 +132,84 @@
       }
     }
 
-    // Fallback 1: HTML search for imdb.com/title/ttXXXXXXX
-    if (!pageImdbId && document.documentElement) {
-      const htmlMatch = document.documentElement.innerHTML.match(/imdb\.com\/title\/(tt\d{7,})/i);
-      if (htmlMatch) pageImdbId = htmlMatch[1];
-    }
-
-    // Fallback 2: HTML search for "imdb_id":"ttXXXXXXX"
-    if (!pageImdbId && document.documentElement) {
-      const jsonMatch = document.documentElement.innerHTML.match(/"imdb_id"\s*:\s*"(tt\d{7,})"/i);
-      if (jsonMatch) pageImdbId = jsonMatch[1];
-    }
-
-    let mediaType = isTv ? "series" : "movie";
-    let title = "";
-    let season = 1;
-    let episode = 1;
-
-    const titleEl = document.querySelector("h2.title a") || document.querySelector(".header_info h2") || document.querySelector("h2") || document.querySelector("title");
-    if (titleEl) title = titleEl.textContent.replace(/(\(\d{4}\)|\n)/g, "").trim();
-
-    // Check for season/episode in URL
+    // 5. Season/Episode from URL: /tv/1396/season/1/episode/1
     const epMatch = url.match(/\/season\/(\d+)\/episode\/(\d+)/i);
     if (epMatch) {
       season = parseInt(epMatch[1]) || 1;
       episode = parseInt(epMatch[2]) || 1;
     }
 
-    return { imdbId: pageImdbId, mediaType, title, season, episode, url };
+    return { imdbId: pageImdbId, tmdbId, mediaType, title, year, season, episode, url };
+  }
+
+  async function resolveImdbIdByTitle(title, year, mediaType) {
+    if (!title) return null;
+    const cleanTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, "_").replace(/^_+|_+$/g, "");
+    if (!cleanTitle) return null;
+
+    const firstChar = cleanTitle.charAt(0);
+    const apiUrl = `https://v3.sg.media-imdb.com/suggestion/${firstChar}/${encodeURIComponent(cleanTitle)}.json`;
+
+    try {
+      const res = await fetch(apiUrl);
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (!data || !Array.isArray(data.d)) return null;
+
+      const targetQids = mediaType === "series"
+        ? ["tvSeries", "tvMiniSeries", "tvEpisode"]
+        : ["feature", "movie", "tvMovie"];
+
+      // If we have a year, try exact type + year match first
+      if (year) {
+        for (const item of data.d) {
+          if (!item.id || !item.id.startsWith("tt")) continue;
+          if (item.qid && targetQids.includes(item.qid) && item.y && Math.abs(item.y - year) <= 1) {
+            return item.id;
+          }
+        }
+        // Relax: any tt with matching year
+        for (const item of data.d) {
+          if (!item.id || !item.id.startsWith("tt")) continue;
+          if (item.y && Math.abs(item.y - year) <= 1) {
+            return item.id;
+          }
+        }
+      }
+
+      // No year or no year match: fall back to type match
+      for (const item of data.d) {
+        if (item.id && item.id.startsWith("tt")) {
+          if (!item.qid || targetQids.includes(item.qid)) {
+            return item.id;
+          }
+        }
+      }
+
+      // Last resort: first tt result
+      const fallback = data.d.find(i => i.id && i.id.startsWith("tt"));
+      return fallback ? fallback.id : null;
+    } catch (e) {
+      console.warn("TorBox Streamer: IMDb suggestion lookup failed", e);
+      return null;
+    }
+  }
+
+  async function ensureImdbId() {
+    if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
+
+    imdbInfo = extractTmdbInfo();
+    if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
+
+    if (imdbInfo && imdbInfo.title) {
+      const resolvedId = await resolveImdbIdByTitle(imdbInfo.title, imdbInfo.year, imdbInfo.mediaType);
+      if (resolvedId) {
+        imdbInfo.imdbId = resolvedId;
+        return imdbInfo;
+      }
+    }
+
+    return imdbInfo;
   }
 
   function injectTmdbButton() {
@@ -509,7 +595,16 @@
 
   function openModal() {
     if (modalEl) return;
-    imdbInfo = extractImdbInfo();
+
+    // On TMDB pages, use extractTmdbInfo; on IMDb pages, use extractImdbInfo
+    if (window.location.hostname.includes("themoviedb.org")) {
+      if (!imdbInfo || !imdbInfo.imdbId) {
+        imdbInfo = extractTmdbInfo();
+      }
+    } else {
+      imdbInfo = extractImdbInfo();
+    }
+
     injectStyles();
 
     modalEl = document.createElement("div");
@@ -842,12 +937,12 @@
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   async function fetchStreams() {
-    if (!imdbInfo || !imdbInfo.imdbId) {
-      if (window.location.hostname.includes("themoviedb.org")) {
-        imdbInfo = extractTmdbInfo();
-      } else {
-        imdbInfo = extractImdbInfo();
-      }
+    setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Resolving title info & fetching streams...</p></div>');
+
+    if (window.location.hostname.includes("themoviedb.org")) {
+      await ensureImdbId();
+    } else if (!imdbInfo || !imdbInfo.imdbId) {
+      imdbInfo = extractImdbInfo();
     }
 
     if (!imdbInfo || !imdbInfo.imdbId) {

@@ -326,34 +326,56 @@ function autoPickFile(files, fileIdx, season, episode) {
   if (season && episode) {
     const s = parseInt(season);
     const e = parseInt(episode);
-    const patterns = [
-      `s${String(s).padStart(2, "0")}e${String(e).padStart(2, "0")}`,
-      `s${String(s).padStart(2, "0")}.e${String(e).padStart(2, "0")}`,
-      `s${String(s).padStart(2, "0")}ep${String(e).padStart(2, "0")}`,
-      `s${s}e${String(e).padStart(2, "0")}`,
-      `s${s}ep${String(e).padStart(2, "0")}`,
-      `s${s}e${e}`,
-      `${String(s).padStart(2, "0")}x${String(e).padStart(2, "0")}`,
-      `${s}x${String(e).padStart(2, "0")}`,
-      `${s}x${e}`,
-      `e${String(e).padStart(2, "0")}`,
-      `ep${String(e).padStart(2, "0")}`,
-      `ep ${String(e).padStart(2, "0")}`,
-      `ep ${e}`,
-      ` - ${String(e).padStart(2, "0")}`,
-      ` - ${e}`,
+    const sp = String(s).padStart(2, "0");
+    const ep = String(e).padStart(2, "0");
+
+    // Tier 1: Season+Episode patterns (high confidence — match both S and E)
+    const tier1Patterns = [
+      new RegExp(`s${sp}[.\s_-]?e${ep}(?!\d)`, "i"),         // s01e05, s01.e05, s01_e05
+      new RegExp(`s${s}[.\s_-]?e${ep}(?!\d)`, "i"),           // s1e05
+      new RegExp(`s${sp}[.\s_-]?e${e}(?!\d)`, "i"),           // s01e5
+      new RegExp(`s${s}[.\s_-]?e${e}(?!\d)`, "i"),            // s1e5
+      new RegExp(`s${sp}[.\s_-]?ep${ep}(?!\d)`, "i"),         // s01ep05
+      new RegExp(`${sp}x${ep}(?!\d)`, "i"),                    // 01x05
+      new RegExp(`${s}x${ep}(?!\d)`, "i"),                     // 1x05
+      new RegExp(`season\s*${sp}[^a-z]*episode\s*${ep}(?!\d)`, "i"), // season 01 episode 05
+      new RegExp(`season\s*${s}[^a-z]*episode\s*${e}(?!\d)`, "i"),   // season 1 episode 5
     ];
 
-    for (const pattern of patterns) {
-      // Try video files first
+    for (const rx of tier1Patterns) {
       for (const f of files) {
-        if (f.name.toLowerCase().includes(pattern) && isVideoFile(f.name)) return f;
+        if (rx.test(f.name) && isVideoFile(f.name)) return f;
       }
-      // Fallback: large files (>100MB) with matching name
       for (const f of files) {
-        if (f.name.toLowerCase().includes(pattern) && f.size > 100_000_000) return f;
+        if (rx.test(f.name) && f.size > 100_000_000) return f;
       }
     }
+
+    // Tier 2: Episode-only patterns (lower confidence — verify season context in path/name)
+    const tier2Patterns = [
+      new RegExp(`(?:^|[\s._\-\[/])e${ep}(?!\d)`, "i"),       // e05 at word boundary
+      new RegExp(`(?:^|[\s._\-\[/])ep${ep}(?!\d)`, "i"),      // ep05 at word boundary
+      new RegExp(`(?:^|[\s._\-\[/])ep\s+${ep}(?!\d)`, "i"),   // ep 05
+      new RegExp(`(?:^|[\s._\-/])episode[\s._]*${ep}(?!\d)`, "i"), // episode 05, episode.05
+      new RegExp(`\b${ep}\s*(?:of|/)\s*\d+`, "i"),             // 05 of 24, 05/24
+      new RegExp(`(?:^|\s|\.|_|-)${ep}\.(?:mkv|mp4|avi)`, "i"), // 05.mkv at boundary
+    ];
+
+    // Verify season context: the file path should reference the correct season
+    const seasonCtx = [
+      new RegExp(`s${sp}|s${s}|season\s*${sp}|season\s*${s}`, "i"),
+    ];
+
+    for (const rx of tier2Patterns) {
+      for (const f of files) {
+        if (!rx.test(f.name) || !isVideoFile(f.name)) continue;
+        // Accept if season context is found in the file path, or if there's no season info at all
+        const hasSeasonRef = seasonCtx.some(sr => sr.test(f.name));
+        const hasAnySeasonRef = /s\d+|season/i.test(f.name);
+        if (hasSeasonRef || !hasAnySeasonRef) return f;
+      }
+    }
+  }
   }
 
   // 3. Pick the largest video file
