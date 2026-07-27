@@ -1,0 +1,16 @@
+{
+  "streams": [
+    {
+      "name": "Torrentio\n4K",
+      "title": "Inception.2010.2160p.UHD.BluRay.x265-TORBOX\n👤 1420 💾 18.4 GB",
+      "infoHash": "a1b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e",
+      "fileIdx": 0
+    },
+    {
+      "name": "Torrentio\n1080p",
+      "title": "Inception.2010.1080p.BluRay.x264-TORBOX\n👤 890 💾 4.2 GB",
+      "infoHash": "b2c3d4e5f60718293a4b5c6d7e8f9a0b1c2d3e4f",
+      "fileIdx": 0
+    }
+  ]
+}

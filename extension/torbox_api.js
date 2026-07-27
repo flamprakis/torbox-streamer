@@ -281,11 +281,11 @@ function getFileExt(filename) {
 
 function isVideoFile(filename) {
   const ext = getFileExt(filename);
-  if (VIDEO_EXTS.has(ext)) return true;
   if (SKIP_EXTS.has(ext)) return false;
-  // Skip obvious non-video paths
+  // Skip obvious non-video or sample/extra paths
   const lower = filename.toLowerCase();
-  if (["subtitle", "subs/", "sample/", "proof", "cover", "poster", "artwork"].some(s => lower.includes(s))) return false;
+  if (["subtitle", "subs/", "sample", "proof", "cover", "poster", "artwork", "featurette"].some(s => lower.includes(s))) return false;
+  if (VIDEO_EXTS.has(ext)) return true;
   // No extension — might still be video
   if (!ext) return true;
   return false;
@@ -331,15 +331,16 @@ function autoPickFile(files, fileIdx, season, episode) {
 
     // Tier 1: Season+Episode patterns (high confidence — match both S and E)
     const tier1Patterns = [
-      new RegExp(`s${sp}[.\s_-]?e${ep}(?!\d)`, "i"),         // s01e05, s01.e05, s01_e05
-      new RegExp(`s${s}[.\s_-]?e${ep}(?!\d)`, "i"),           // s1e05
-      new RegExp(`s${sp}[.\s_-]?e${e}(?!\d)`, "i"),           // s01e5
-      new RegExp(`s${s}[.\s_-]?e${e}(?!\d)`, "i"),            // s1e5
-      new RegExp(`s${sp}[.\s_-]?ep${ep}(?!\d)`, "i"),         // s01ep05
-      new RegExp(`${sp}x${ep}(?!\d)`, "i"),                    // 01x05
-      new RegExp(`${s}x${ep}(?!\d)`, "i"),                     // 1x05
-      new RegExp(`season\s*${sp}[^a-z]*episode\s*${ep}(?!\d)`, "i"), // season 01 episode 05
-      new RegExp(`season\s*${s}[^a-z]*episode\s*${e}(?!\d)`, "i"),   // season 1 episode 5
+      new RegExp(`s${sp}[.\\s_-]?e${ep}(?!\\d)`, "i"),        // s01e05, s01.e05, s01_e05
+      new RegExp(`s${s}[.\\s_-]?e${ep}(?!\\d)`, "i"),          // s1e05
+      new RegExp(`s${sp}[.\\s_-]?e${e}(?!\\d)`, "i"),          // s01e5
+      new RegExp(`s${s}[.\\s_-]?e${e}(?!\\d)`, "i"),           // s1e5
+      new RegExp(`s${sp}[.\\s_-]?ep${ep}(?!\\d)`, "i"),        // s01ep05
+      new RegExp(`${sp}x${ep}(?!\\d)`, "i"),                   // 01x05
+      new RegExp(`${s}x${ep}(?!\\d)`, "i"),                    // 1x05
+      new RegExp(`season\\s*${sp}[\\s._/\\-]*episode\\s*${ep}(?!\\d)`, "i"), // season 01 episode 05
+      new RegExp(`season\\s*${s}[\\s._/\\-]*episode\\s*${ep}(?!\\d)`, "i"),  // season 1 episode 05
+      new RegExp(`season\\s*${s}[\\s._/\\-]*episode\\s*${e}(?!\\d)`, "i"),   // season 1 episode 5
     ];
 
     for (const rx of tier1Patterns) {
@@ -353,17 +354,17 @@ function autoPickFile(files, fileIdx, season, episode) {
 
     // Tier 2: Episode-only patterns (lower confidence — verify season context in path/name)
     const tier2Patterns = [
-      new RegExp(`(?:^|[\s._\-\[/])e${ep}(?!\d)`, "i"),       // e05 at word boundary
-      new RegExp(`(?:^|[\s._\-\[/])ep${ep}(?!\d)`, "i"),      // ep05 at word boundary
-      new RegExp(`(?:^|[\s._\-\[/])ep\s+${ep}(?!\d)`, "i"),   // ep 05
-      new RegExp(`(?:^|[\s._\-/])episode[\s._]*${ep}(?!\d)`, "i"), // episode 05, episode.05
-      new RegExp(`\b${ep}\s*(?:of|/)\s*\d+`, "i"),             // 05 of 24, 05/24
-      new RegExp(`(?:^|\s|\.|_|-)${ep}\.(?:mkv|mp4|avi)`, "i"), // 05.mkv at boundary
+      new RegExp(`(?:^|[\\s._\\[/\\-])e${ep}(?!\\d)`, "i"),       // e05 at word boundary
+      new RegExp(`(?:^|[\\s._\\[/\\-])ep${ep}(?!\\d)`, "i"),      // ep05 at word boundary
+      new RegExp(`(?:^|[\\s._\\[/\\-])ep\\s+${ep}(?!\\d)`, "i"),   // ep 05
+      new RegExp(`(?:^|[\\s._/\\-])episode[\\s._]*${ep}(?!\\d)`, "i"), // episode 05, episode.05
+      new RegExp(`\\b${ep}\\s*(?:of|/)\\s*\\d+`, "i"),            // 05 of 24, 05/24
+      new RegExp(`(?:^|\\s|\\.|_|-)${ep}\\.(?:mkv|mp4|avi)`, "i"), // 05.mkv at boundary
     ];
 
     // Verify season context: the file path should reference the correct season
     const seasonCtx = [
-      new RegExp(`s${sp}|s${s}|season\s*${sp}|season\s*${s}`, "i"),
+      new RegExp(`s${sp}|s${s}|season\\s*${sp}|season\\s*${s}`, "i"),
     ];
 
     for (const rx of tier2Patterns) {
@@ -375,7 +376,6 @@ function autoPickFile(files, fileIdx, season, episode) {
         if (hasSeasonRef || !hasAnySeasonRef) return f;
       }
     }
-  }
   }
 
   // 3. Pick the largest video file

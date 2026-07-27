@@ -5,4 +5,18 @@ __pycache__/
 dist/
 build/
 .env
+.env.test
 *.xpi
+
+# Node & Dependencies
+node_modules/
+
+# Playwright & Test Artifacts
+test-results/
+playwright-report/
+.playwright/
+
+# OS & Editor Files
+.DS_Store
+.vscode/
+.idea/

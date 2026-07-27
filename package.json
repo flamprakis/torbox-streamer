@@ -1,0 +1,26 @@
+{
+  "name": "torbox-streamer",
+  "version": "2.0.2",
+  "description": "TorBox Streamer browser extension for Firefox & Waterfox",
+  "main": "extension/background.js",
+  "scripts": {
+    "test:unit": "vitest run tests/unit",
+    "test:unit:watch": "vitest tests/unit",
+    "test:e2e": "playwright test tests/e2e/mock",
+    "test:e2e:live": "playwright test tests/e2e/live",
+    "test": "npm run test:unit && npm run test:e2e"
+  },
+  "keywords": [
+    "torbox",
+    "browser-extension",
+    "firefox",
+    "stremio",
+    "torrentio"
+  ],
+  "author": "flamprakis",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "vitest": "^2.1.8"
+  }
+}
