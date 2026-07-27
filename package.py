@@ -47,6 +47,17 @@ def generate_chrome_manifest_v3(v2_manifest):
         if host_permissions:
             v3["host_permissions"] = host_permissions
 
+    # Convert web_accessible_resources for MV3
+    if "web_accessible_resources" in v3:
+        raw_resources = v3["web_accessible_resources"]
+        if raw_resources and isinstance(raw_resources[0], str):
+            v3["web_accessible_resources"] = [
+                {
+                    "resources": raw_resources,
+                    "matches": ["<all_urls>"]
+                }
+            ]
+
     # Remove Gecko specific settings for Chrome
     v3.pop("browser_specific_settings", None)
     return v3
@@ -100,6 +111,12 @@ def package():
                 if file == "manifest.json":
                     # Write converted Manifest V3
                     zf.writestr(str(arcname), json.dumps(manifest_v3, indent=2))
+                elif file == "background.js":
+                    # Prepend importScripts for Chrome MV3 service worker
+                    with open(file_path, "r", encoding="utf-8") as bf:
+                        content = bf.read()
+                    sw_content = "try { importScripts('torbox_api.js'); } catch (e) {}\n" + content
+                    zf.writestr(str(arcname), sw_content)
                 else:
                     zf.write(file_path, arcname)
 
