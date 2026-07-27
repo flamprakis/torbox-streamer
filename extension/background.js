@@ -116,9 +116,9 @@ async function fetchTorrentio(imdbId, season, episode) {
     }
 
     const data = JSON.parse(text);
-    const streams = (data.streams || []).filter(s => s.infoHash);
+    const rawStreams = (data.streams || []).filter(s => s.infoHash);
 
-    return streams.slice(0, config.maxResults).map((s, idx) => {
+    const parsedStreams = rawStreams.map((s, idx) => {
       const fullText = `${s.name || ""} ${s.title || ""}`;
       return {
         info_hash: s.infoHash.toLowerCase(),
@@ -131,9 +131,53 @@ async function fetchTorrentio(imdbId, season, episode) {
         original_index: idx,
       };
     });
+
+    return distributeStreamsByQuality(parsedStreams, config);
   } catch (e) {
     throw new Error(`Torrentio fetch failed: ${e.message}`);
   }
+}
+
+function distributeStreamsByQuality(streams, config = {}) {
+  const defaultQualities = ["4K", "1080p", "720p", "480p"];
+  const enabledQualities = config.enabled_qualities || defaultQualities;
+  const maxPerQuality = parseInt(config.max_per_quality) || 5;
+  const legacyFilter = config.default_quality_filter || "all";
+
+  if (legacyFilter && legacyFilter !== "all") {
+    return streams.filter(s => s.quality === legacyFilter).slice(0, config.maxResults || 20);
+  }
+
+  const buckets = {
+    "4K": [],
+    "1080p": [],
+    "720p": [],
+    "480p": [],
+    "Other": []
+  };
+
+  for (const s of streams) {
+    if (s.quality === "4K") buckets["4K"].push(s);
+    else if (s.quality === "1080p") buckets["1080p"].push(s);
+    else if (s.quality === "720p") buckets["720p"].push(s);
+    else if (s.quality === "480p" || s.quality === "SD") buckets["480p"].push(s);
+    else buckets["Other"].push(s);
+  }
+
+  const result = [];
+  for (const q of defaultQualities) {
+    if (enabledQualities.includes(q)) {
+      result.push(...buckets[q].slice(0, maxPerQuality));
+    }
+  }
+
+  const limit = config.maxResults || 20;
+  if (result.length < limit) {
+    const remaining = limit - result.length;
+    result.push(...buckets["Other"].slice(0, remaining));
+  }
+
+  return result.slice(0, limit);
 }
 
 // ─── Parsing Helpers ────────────────────────────────────────────────────────
@@ -361,6 +405,19 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       tryLaunchPlayer(msg.url, msg.player || "mpv", msg.subtitles || []).then(success => {
         sendResponse({ success });
       });
+      return true;
+
+    case "FETCH_SUBTITLE_TEXT":
+      (async () => {
+        try {
+          const resp = await fetch(msg.url);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const text = await resp.text();
+          sendResponse({ type: "SUBTITLE_TEXT_RESULT", success: true, text });
+        } catch (e) {
+          sendResponse({ type: "SUBTITLE_TEXT_RESULT", success: false, error: e.message });
+        }
+      })();
       return true;
 
     case "OPEN_OPTIONS":

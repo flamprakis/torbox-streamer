@@ -12,7 +12,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const mpvPathEl = document.getElementById("mpv-path");
   const vlcPathEl = document.getElementById("vlc-path");
 
-  const qualityPrefEl = document.getElementById("quality-pref");
+  const qual4kEl = document.getElementById("qual-4k");
+  const qual1080pEl = document.getElementById("qual-1080p");
+  const qual720pEl = document.getElementById("qual-720p");
+  const qual480pEl = document.getElementById("qual-480p");
+  const maxPerQualEl = document.getElementById("max-per-quality");
 
   const subtitleLangsEl = document.getElementById("subtitle-langs");
 
@@ -21,6 +25,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     "torbox_api_key",
     "player_preference",
     "default_quality_filter",
+    "enabled_qualities",
+    "max_per_quality",
     "mpv_path",
     "vlc_path",
     "torrentio_base_url",
@@ -33,6 +39,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (config.default_quality_filter) qualityPrefEl.value = config.default_quality_filter;
   if (config.mpv_path) mpvPathEl.value = config.mpv_path;
   if (config.vlc_path) vlcPathEl.value = config.vlc_path;
+  if (config.max_per_quality) maxPerQualEl.value = config.max_per_quality;
+
+  const enabledQuals = config.enabled_qualities || ["4K", "1080p", "720p", "480p"];
+  qual4kEl.checked = enabledQuals.includes("4K");
+  qual1080pEl.checked = enabledQuals.includes("1080p");
+  qual720pEl.checked = enabledQuals.includes("720p");
+  qual480pEl.checked = enabledQuals.includes("480p");
+
   subtitleLangsEl.value = config.subtitle_languages || "en, browser";
   torrentioUrlEl.value = config.torrentio_base_url || "https://torrentio.strem.fun";
   maxResultsEl.value = config.max_results || 20;
@@ -57,10 +71,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     const subLangs = subtitleLangsEl.value.trim() || "en, browser";
     const maxRes = parseInt(maxResultsEl.value) || 20;
 
+    const enabledQualities = [];
+    if (qual4kEl.checked) enabledQualities.push("4K");
+    if (qual1080pEl.checked) enabledQualities.push("1080p");
+    if (qual720pEl.checked) enabledQualities.push("720p");
+    if (qual480pEl.checked) enabledQualities.push("480p");
+
+    const maxPerQual = parseInt(maxPerQualEl.value) || 5;
+
     await browser.storage.local.set({
       torbox_api_key: key,
       player_preference: pref,
       default_quality_filter: qualPref,
+      enabled_qualities: enabledQualities,
+      max_per_quality: maxPerQual,
       mpv_path: mpvPath,
       vlc_path: vlcPath,
       torrentio_base_url: url,

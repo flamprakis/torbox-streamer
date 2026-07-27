@@ -197,11 +197,35 @@
     }
   }
 
+  async function resolveImdbIdByTmdbId(tmdbId, mediaType = "movie") {
+    if (!tmdbId) return null;
+    const type = mediaType === "series" ? "series" : "movie";
+    try {
+      const resp = await fetch(`https://v3-cinemeta.strem.fun/meta/${type}/tmdb:${tmdbId}.json`);
+      if (!resp.ok) return null;
+      const json = await resp.json();
+      if (json && json.meta && json.meta.imdb_id) {
+        return json.meta.imdb_id;
+      }
+    } catch (e) {
+      console.warn("TorBox Streamer: Cinemeta TMDB resolution failed", e);
+    }
+    return null;
+  }
+
   async function ensureImdbId() {
     if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
 
     imdbInfo = extractTmdbInfo();
     if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
+
+    if (imdbInfo && imdbInfo.tmdbId) {
+      const cinemetaId = await resolveImdbIdByTmdbId(imdbInfo.tmdbId, imdbInfo.mediaType);
+      if (cinemetaId) {
+        imdbInfo.imdbId = cinemetaId;
+        return imdbInfo;
+      }
+    }
 
     if (imdbInfo && imdbInfo.title) {
       const resolvedId = await resolveImdbIdByTitle(imdbInfo.title, imdbInfo.year, imdbInfo.mediaType);

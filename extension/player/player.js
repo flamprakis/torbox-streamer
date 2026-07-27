@@ -123,8 +123,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     const sub = currentSubtitles[index];
     if (!rawSubTexts[sub.url]) {
       try {
-        const resp = await fetch(sub.url);
-        rawSubTexts[sub.url] = await resp.text();
+        const res = await browser.runtime.sendMessage({ type: "FETCH_SUBTITLE_TEXT", url: sub.url });
+        if (res && res.success && res.text) {
+          rawSubTexts[sub.url] = res.text;
+        } else {
+          // Fallback direct fetch
+          const resp = await fetch(sub.url);
+          rawSubTexts[sub.url] = await resp.text();
+        }
       } catch (e) {
         return;
       }
