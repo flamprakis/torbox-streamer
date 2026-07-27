@@ -393,3 +393,62 @@ function autoPickFile(files, fileIdx, season, episode) {
   // 5. Last resort: largest file overall
   return files.reduce((a, b) => a.size > b.size ? a : b);
 }
+
+// ─── Subtitles Helper ────────────────────────────────────────────────────────
+
+function parsePreferredLanguages(prefString, userBrowserLang = "en") {
+  const defaultLangs = ["en"];
+  if (userBrowserLang) {
+    const shortLang = userBrowserLang.slice(0, 2).toLowerCase();
+    if (!defaultLangs.includes(shortLang)) defaultLangs.push(shortLang);
+  }
+
+  if (!prefString || typeof prefString !== "string") return defaultLangs;
+
+  const result = new Set();
+  const tokens = prefString.split(",").map(t => t.trim().toLowerCase()).filter(Boolean);
+
+  for (const token of tokens) {
+    if (token === "browser") {
+      if (userBrowserLang) result.add(userBrowserLang.slice(0, 2).toLowerCase());
+    } else {
+      result.add(token.slice(0, 3));
+    }
+  }
+
+  // Ensure English is always included as requested
+  result.add("en");
+
+  return Array.from(result);
+}
+
+async function fetchSubtitles(imdbId, season = 1, episode = 1, mediaType = "movie", preferredLangs = ["en"]) {
+  if (!imdbId) return [];
+
+  const queryId = mediaType === "series" ? `${imdbId}:${season}:${episode}` : imdbId;
+  const url = `https://opensubtitles.strem.fun/subtitles/${mediaType}/${queryId}.json`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return [];
+    const data = await response.json();
+    if (!data || !data.subtitles) return [];
+
+    const allowed = new Set(preferredLangs.map(l => l.toLowerCase()));
+
+    return data.subtitles
+      .filter(sub => {
+        const lang = (sub.lang || sub.id || "en").toLowerCase();
+        return allowed.has("all") || allowed.has(lang) || allowed.has(lang.slice(0, 2));
+      })
+      .map(sub => ({
+        id: sub.id || sub.url,
+        url: sub.url,
+        lang: sub.lang || "en",
+        label: sub.lang ? sub.lang.toUpperCase() : "English",
+      }));
+  } catch (e) {
+    return [];
+  }
+}
+

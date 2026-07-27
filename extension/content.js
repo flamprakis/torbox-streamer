@@ -621,13 +621,19 @@
             </svg>
             TorBox Streamer
           </h3>
-          <button id="torbox-modal-close">&times;</button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button id="torbox-modal-options" title="Settings / Options" style="background:none;border:none;color:#a0a0b0;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;">⚙️</button>
+            <button id="torbox-modal-close">&times;</button>
+          </div>
         </div>
         <div id="torbox-modal-body"></div>
       </div>
     `;
     document.body.appendChild(modalEl);
 
+    modalEl.querySelector("#torbox-modal-options").addEventListener("click", () => {
+      browser.runtime.sendMessage({ type: "OPEN_OPTIONS" });
+    });
     modalEl.querySelector("#torbox-modal-close").addEventListener("click", closeModal);
     modalEl.addEventListener("click", (e) => {
       if (e.target === modalEl) closeModal();

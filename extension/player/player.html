@@ -9,6 +9,14 @@
   <div class="player-header">
     <span id="title" class="title">Loading stream...</span>
     <div class="header-actions">
+      <div class="sub-controls" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px;">
+        <label for="sub-select" style="font-size:12px;color:#a0a0b0;">💬 Subs:</label>
+        <select id="sub-select" class="btn" style="padding:4px 8px;font-size:12px;background:#242436;">
+          <option value="">Off</option>
+        </select>
+        <button id="btn-sub-minus" class="btn" title="Subtitle Delay -0.5s" style="padding:4px 8px;font-size:12px;">-0.5s</button>
+        <button id="btn-sub-plus" class="btn" title="Subtitle Delay +0.5s" style="padding:4px 8px;font-size:12px;">+0.5s</button>
+      </div>
       <button id="btn-mpv" class="btn">Try in MPV</button>
       <button id="btn-vlc" class="btn">Try in VLC</button>
       <button id="btn-copy" class="btn">Copy Stream URL</button>

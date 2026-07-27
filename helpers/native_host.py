@@ -100,10 +100,18 @@ def main():
                     player_bin = find_player_executable(player)
                 log(f"Using player binary: {player_bin}")
 
+                subtitles = msg.get("subtitles") or []
+                if isinstance(subtitles, str):
+                    subtitles = [subtitles]
+
                 if player == "vlc":
                     cmd = [player_bin, url]
+                    for sub in subtitles[:1]:
+                        cmd.append(f"--sub-file={sub}")
                 else:
                     cmd = [player_bin, "--force-window=yes", url]
+                    for sub in subtitles:
+                        cmd.append(f"--sub-file={sub}")
 
                 log(f"Running cmd: {cmd}")
 

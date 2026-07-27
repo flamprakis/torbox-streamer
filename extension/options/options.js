@@ -14,6 +14,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const qualityPrefEl = document.getElementById("quality-pref");
 
+  const subtitleLangsEl = document.getElementById("subtitle-langs");
+
   // Load existing options
   const config = await browser.storage.local.get([
     "torbox_api_key",
@@ -22,6 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     "mpv_path",
     "vlc_path",
     "torrentio_base_url",
+    "subtitle_languages",
     "max_results",
   ]);
 
@@ -30,6 +33,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (config.default_quality_filter) qualityPrefEl.value = config.default_quality_filter;
   if (config.mpv_path) mpvPathEl.value = config.mpv_path;
   if (config.vlc_path) vlcPathEl.value = config.vlc_path;
+  subtitleLangsEl.value = config.subtitle_languages || "en, browser";
   torrentioUrlEl.value = config.torrentio_base_url || "https://torrentio.strem.fun";
   maxResultsEl.value = config.max_results || 20;
 
@@ -50,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const mpvPath = mpvPathEl.value.trim();
     const vlcPath = vlcPathEl.value.trim();
     const url = torrentioUrlEl.value.trim() || "https://torrentio.strem.fun";
+    const subLangs = subtitleLangsEl.value.trim() || "en, browser";
     const maxRes = parseInt(maxResultsEl.value) || 20;
 
     await browser.storage.local.set({
@@ -59,6 +64,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       mpv_path: mpvPath,
       vlc_path: vlcPath,
       torrentio_base_url: url,
+      subtitle_languages: subLangs,
       max_results: maxRes,
     });
 
