@@ -1,3 +1,5 @@
+var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
+
 document.addEventListener("DOMContentLoaded", async () => {
   const apiKeyEl = document.getElementById("api-key");
   const toggleKeyEl = document.getElementById("toggle-key");

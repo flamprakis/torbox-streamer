@@ -1,3 +1,5 @@
+var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
+
 document.addEventListener("DOMContentLoaded", () => {
   const params = new URLSearchParams(window.location.search);
   const streamUrl = params.get("url");

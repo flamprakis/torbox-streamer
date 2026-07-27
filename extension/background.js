@@ -7,6 +7,7 @@
  */
 
 const NATIVE_HOST = "com.torbox_streamer.host";
+var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
 let nativePort = null;
 let isNativeConnected = false;
 

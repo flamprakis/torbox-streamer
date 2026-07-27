@@ -17,6 +17,7 @@ export default defineConfig({
   projects: [
     {
       name: 'firefox-extension',
+      testMatch: /.*(mock|live).*/,
       use: {
         ...devices['Desktop Firefox'],
         headless: true,

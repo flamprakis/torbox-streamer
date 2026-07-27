@@ -6,6 +6,8 @@
 (function () {
   "use strict";
 
+  var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
+
   // ─── State ────────────────────────────────────────────────────────────────
   let imdbInfo = null;
   let currentStreams = [];
