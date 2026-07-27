@@ -60,7 +60,7 @@ set "CHROMIUM_MANIFEST=%TARGET_DIR%\com.torbox_streamer.host.chrome.json"
     echo   "path": "!ESCAPED_EXEC!",
     echo   "type": "stdio",
     echo   "allowed_origins": [
-    echo     "chrome-extension://*/"
+    echo     "chrome-extension://ldnghajfecbhmnlnoejglhkdojdambef/"
     echo   ]
     echo }
 ) > "%CHROMIUM_MANIFEST%"

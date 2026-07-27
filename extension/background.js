@@ -380,11 +380,14 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // Toolbar icon click → open options page or trigger modal
-browser.browserAction.onClicked.addListener((tab) => {
-  browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {
-    browser.runtime.openOptionsPage();
+const actionApi = browser.action || browser.browserAction;
+if (actionApi && actionApi.onClicked) {
+  actionApi.onClicked.addListener((tab) => {
+    browser.tabs.sendMessage(tab.id, { type: "OPEN_MODAL" }).catch(() => {
+      browser.runtime.openOptionsPage();
+    });
   });
-});
+}
 
 // Cleanup tab info on close
 browser.tabs.onRemoved.addListener((tabId) => {

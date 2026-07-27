@@ -27,7 +27,7 @@ def build_gecko_manifest(exec_path):
     }
 
 
-def build_chromium_manifest(exec_path, chrome_id="*"):
+def build_chromium_manifest(exec_path, chrome_id="ldnghajfecbhmnlnoejglhkdojdambef"):
     return {
         "name": HOST_NAME,
         "description": "TorBox Streamer Native Messaging Host",
@@ -44,6 +44,7 @@ def get_known_browsers():
     if sys.platform == "linux":
         home = Path.home()
         candidates = [
+            # Native Linux Paths
             ("Firefox", "gecko", home / ".mozilla", home / ".mozilla" / "native-messaging-hosts"),
             ("Waterfox", "gecko", home / ".waterfox", home / ".waterfox" / "native-messaging-hosts"),
             ("LibreWolf", "gecko", home / ".librewolf", home / ".librewolf" / "native-messaging-hosts"),
@@ -51,6 +52,25 @@ def get_known_browsers():
             ("Google Chrome", "chromium", home / ".config" / "google-chrome", home / ".config" / "google-chrome" / "NativeMessagingHosts"),
             ("Chromium", "chromium", home / ".config" / "chromium", home / ".config" / "chromium" / "NativeMessagingHosts"),
             ("Brave", "chromium", home / ".config" / "BraveSoftware", home / ".config" / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts"),
+            ("Vivaldi", "chromium", home / ".config" / "vivaldi", home / ".config" / "vivaldi" / "NativeMessagingHosts"),
+            ("Microsoft Edge", "chromium", home / ".config" / "microsoft-edge", home / ".config" / "microsoft-edge" / "NativeMessagingHosts"),
+
+            # Flatpak Paths
+            ("Firefox (Flatpak)", "gecko", home / ".var" / "app" / "org.mozilla.firefox", home / ".var" / "app" / "org.mozilla.firefox" / ".mozilla" / "native-messaging-hosts"),
+            ("Waterfox (Flatpak)", "gecko", home / ".var" / "app" / "net.waterfox.waterfox", home / ".var" / "app" / "net.waterfox.waterfox" / ".waterfox" / "native-messaging-hosts"),
+            ("LibreWolf (Flatpak)", "gecko", home / ".var" / "app" / "io.gitlab.librewolf-community", home / ".var" / "app" / "io.gitlab.librewolf-community" / ".librewolf" / "native-messaging-hosts"),
+            ("Zen Browser (Flatpak)", "gecko", home / ".var" / "app" / "io.github.zen_browser.zen", home / ".var" / "app" / "io.github.zen_browser.zen" / ".zen" / "native-messaging-hosts"),
+            ("Google Chrome (Flatpak)", "chromium", home / ".var" / "app" / "com.google.Chrome", home / ".var" / "app" / "com.google.Chrome" / "config" / "google-chrome" / "NativeMessagingHosts"),
+            ("Chromium (Flatpak)", "chromium", home / ".var" / "app" / "org.chromium.Chromium", home / ".var" / "app" / "org.chromium.Chromium" / "config" / "chromium" / "NativeMessagingHosts"),
+            ("Brave (Flatpak)", "chromium", home / ".var" / "app" / "com.brave.Browser", home / ".var" / "app" / "com.brave.Browser" / "config" / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts"),
+            ("Vivaldi (Flatpak)", "chromium", home / ".var" / "app" / "com.vivaldi.Vivaldi", home / ".var" / "app" / "com.vivaldi.Vivaldi" / "config" / "vivaldi" / "NativeMessagingHosts"),
+            ("Microsoft Edge (Flatpak)", "chromium", home / ".var" / "app" / "com.microsoft.Edge", home / ".var" / "app" / "com.microsoft.Edge" / "config" / "microsoft-edge" / "NativeMessagingHosts"),
+
+            # Snap Paths
+            ("Firefox (Snap)", "gecko", home / "snap" / "firefox", home / "snap" / "firefox" / "common" / ".mozilla" / "native-messaging-hosts"),
+            ("Google Chrome (Snap)", "chromium", home / "snap" / "google-chrome", home / "snap" / "google-chrome" / "current" / ".config" / "google-chrome" / "NativeMessagingHosts"),
+            ("Chromium (Snap)", "chromium", home / "snap" / "chromium", home / "snap" / "chromium" / "current" / ".config" / "chromium" / "NativeMessagingHosts"),
+            ("Brave (Snap)", "chromium", home / "snap" / "brave", home / "snap" / "brave" / "current" / ".config" / "BraveSoftware" / "Brave-Browser" / "NativeMessagingHosts"),
         ]
     elif sys.platform == "darwin":
         app_supp = Path.home() / "Library" / "Application Support"

@@ -9,6 +9,7 @@ Bundles 3 release artifacts in build/:
 
 import json
 import os
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -37,15 +38,12 @@ def generate_chrome_manifest_v3(v2_manifest):
     # Permissions split into permissions and host_permissions
     if "permissions" in v3:
         permissions = []
-        host_permissions = []
+        host_permissions = ["<all_urls>"]
         for p in v3["permissions"]:
-            if "://" in p or p == "<all_urls>":
-                host_permissions.append(p)
-            else:
+            if not ("://" in p or p == "<all_urls>"):
                 permissions.append(p)
         v3["permissions"] = permissions
-        if host_permissions:
-            v3["host_permissions"] = host_permissions
+        v3["host_permissions"] = host_permissions
 
     # Convert web_accessible_resources for MV3
     if "web_accessible_resources" in v3:
@@ -57,6 +55,9 @@ def generate_chrome_manifest_v3(v2_manifest):
                     "matches": ["<all_urls>"]
                 }
             ]
+
+    # Inject fixed RSA public key for deterministic extension ID in Chrome unpacked mode
+    v3["key"] = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAw5F18+3Z/hc27dgnvqwQGnSAEtLdoX+Q16MP4AtVYKPtQw43Rs5frBQZo/ssck2rFmB4xNdKCjV8VDp60HdbZI4TWoWr+1emb6PniWUHADxPA5eqMb7CmL9MmaPfUtq7meksTglVjtmQX3RphzJpl0nLXTvx7PSmndoOPjJC8wYarn5NeZ9LQukYhAPefyMqWvWlF19rexSU+OSCm4aiXV7WDwfy/UXvX8W7QyiRBpBY638/76+JTvyEizD8W+gklRCdZSgFIrIBNt9g665sbZgIXI5LFD3QeSe8kxTEPH7M5JYqP5+sKwIOCsLOhi9NkV2boXz4E7/KZ226DyDM4wIDAQAB"
 
     # Remove Gecko specific settings for Chrome
     v3.pop("browser_specific_settings", None)
@@ -122,6 +123,15 @@ def package():
 
     chrome_size = chrome_zip_path.stat().st_size / 1024
     print(f"   ✅ Chrome Zip created: {chrome_zip_path.name} ({chrome_size:.1f} KB)")
+
+    # Also output unpacked Chrome extension for easy loading and E2E testing
+    unpacked_dir = BUILD_DIR / "chrome-ext-unpacked"
+    if unpacked_dir.exists():
+        shutil.rmtree(unpacked_dir)
+    unpacked_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(chrome_zip_path, "r") as zf:
+        zf.extractall(unpacked_dir)
+    print(f"   ✅ Unpacked Chrome Extension created: {unpacked_dir}")
 
     # 3. Package Native Host Installers
     installer_zip_path = BUILD_DIR / f"torbox-native-host-installer-v{version}.zip"

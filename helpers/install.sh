@@ -58,7 +58,7 @@ cat <<EOF > "$CHROMIUM_TMP"
   "path": "$FINAL_EXEC",
   "type": "stdio",
   "allowed_origins": [
-    "chrome-extension://*/"
+    "chrome-extension://ldnghajfecbhmnlnoejglhkdojdambef/"
   ]
 }
 EOF
@@ -89,6 +89,7 @@ if [ "$(uname -s)" = "Darwin" ]; then
     check_browser "Google Chrome" "chromium" "$APP_SUPP/Google/Chrome" "$APP_SUPP/Google/Chrome/NativeMessagingHosts"
     check_browser "Brave" "chromium" "$APP_SUPP/BraveSoftware/Brave-Browser" "$APP_SUPP/BraveSoftware/Brave-Browser/NativeMessagingHosts"
 else
+    # Native Linux Paths
     check_browser "Firefox" "gecko" "$HOME/.mozilla" "$HOME/.mozilla/native-messaging-hosts"
     check_browser "Waterfox" "gecko" "$HOME/.waterfox" "$HOME/.waterfox/native-messaging-hosts"
     check_browser "Waterfox Current" "gecko" "$HOME/.waterfox-current" "$HOME/.waterfox-current/native-messaging-hosts"
@@ -97,6 +98,25 @@ else
     check_browser "Google Chrome" "chromium" "$HOME/.config/google-chrome" "$HOME/.config/google-chrome/NativeMessagingHosts"
     check_browser "Chromium" "chromium" "$HOME/.config/chromium" "$HOME/.config/chromium/NativeMessagingHosts"
     check_browser "Brave" "chromium" "$HOME/.config/BraveSoftware/Brave-Browser" "$HOME/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+    check_browser "Vivaldi" "chromium" "$HOME/.config/vivaldi" "$HOME/.config/vivaldi/NativeMessagingHosts"
+    check_browser "Microsoft Edge" "chromium" "$HOME/.config/microsoft-edge" "$HOME/.config/microsoft-edge/NativeMessagingHosts"
+
+    # Flatpak Paths
+    check_browser "Firefox (Flatpak)" "gecko" "$HOME/.var/app/org.mozilla.firefox" "$HOME/.var/app/org.mozilla.firefox/.mozilla/native-messaging-hosts"
+    check_browser "Waterfox (Flatpak)" "gecko" "$HOME/.var/app/net.waterfox.waterfox" "$HOME/.var/app/net.waterfox.waterfox/.waterfox/native-messaging-hosts"
+    check_browser "LibreWolf (Flatpak)" "gecko" "$HOME/.var/app/io.gitlab.librewolf-community" "$HOME/.var/app/io.gitlab.librewolf-community/.librewolf/native-messaging-hosts"
+    check_browser "Zen Browser (Flatpak)" "gecko" "$HOME/.var/app/io.github.zen_browser.zen" "$HOME/.var/app/io.github.zen_browser.zen/.zen/native-messaging-hosts"
+    check_browser "Google Chrome (Flatpak)" "chromium" "$HOME/.var/app/com.google.Chrome" "$HOME/.var/app/com.google.Chrome/config/google-chrome/NativeMessagingHosts"
+    check_browser "Chromium (Flatpak)" "chromium" "$HOME/.var/app/org.chromium.Chromium" "$HOME/.var/app/org.chromium.Chromium/config/chromium/NativeMessagingHosts"
+    check_browser "Brave (Flatpak)" "chromium" "$HOME/.var/app/com.brave.Browser" "$HOME/.var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
+    check_browser "Vivaldi (Flatpak)" "chromium" "$HOME/.var/app/com.vivaldi.Vivaldi" "$HOME/.var/app/com.vivaldi.Vivaldi/config/vivaldi/NativeMessagingHosts"
+    check_browser "Microsoft Edge (Flatpak)" "chromium" "$HOME/.var/app/com.microsoft.Edge" "$HOME/.var/app/com.microsoft.Edge/config/microsoft-edge/NativeMessagingHosts"
+
+    # Snap Paths
+    check_browser "Firefox (Snap)" "gecko" "$HOME/snap/firefox" "$HOME/snap/firefox/common/.mozilla/native-messaging-hosts"
+    check_browser "Google Chrome (Snap)" "chromium" "$HOME/snap/google-chrome" "$HOME/snap/google-chrome/current/.config/google-chrome/NativeMessagingHosts"
+    check_browser "Chromium (Snap)" "chromium" "$HOME/snap/chromium" "$HOME/snap/chromium/current/.config/chromium/NativeMessagingHosts"
+    check_browser "Brave (Snap)" "chromium" "$HOME/snap/brave" "$HOME/snap/brave/current/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
 fi
 
 if [ ${#DETECTED_NAMES[@]} -eq 0 ]; then

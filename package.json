@@ -6,9 +6,10 @@
   "scripts": {
     "test:unit": "vitest run tests/unit",
     "test:unit:watch": "vitest tests/unit",
-    "test:e2e": "playwright test tests/e2e/mock",
-    "test:e2e:live": "playwright test tests/e2e/live",
-    "test": "npm run test:unit && npm run test:e2e"
+    "test:e2e:mock": "playwright test tests/e2e/mock",
+    "test:e2e:online": "playwright test tests/e2e/online",
+    "test:e2e": "npm run test:e2e:mock",
+    "test": "npm run test:unit && npm run test:e2e:mock"
   },
   "keywords": [
     "torbox",

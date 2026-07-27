@@ -217,7 +217,7 @@
   function injectTmdbButton() {
     if (document.getElementById("torbox-play-btn")) return;
 
-    const container = document.querySelector("ul.actions") || document.querySelector("div.action_bar") || document.querySelector(".header_info");
+    const container = document.querySelector("ul.actions") || document.querySelector(".actions ul") || document.querySelector("ul.shortcut_bar") || document.querySelector("div.action_bar") || document.querySelector(".header_info");
     if (!container) {
       setTimeout(injectTmdbButton, 800);
       return;
@@ -313,8 +313,11 @@
     const selectors = [
       '[data-testid="hero-subnav-bar"] ul',
       '[data-testid="hero__primary-actions"]',
+      '.hero-title-block__actions',
       '.ipc-action-mode-container',
       'ul[class*="ipc-inline-list"]',
+      'ul.shortcut_bar',
+      '.shortcut_bar',
     ];
 
     let container = null;
@@ -985,7 +988,16 @@
 
     try {
       const resp = await browser.runtime.sendMessage(msg);
-      if (!resp) return;
+      if (!resp) {
+        setModalBody(`
+          <div class="torbox-error">⚠ No response from background script. Please check your extension settings or reload the extension.</div>
+          <div style="text-align:center;margin-top:12px;">
+            <button class="torbox-btn torbox-btn-primary" id="torbox-retry-btn">Retry</button>
+          </div>
+        `);
+        document.getElementById("torbox-retry-btn").addEventListener("click", fetchStreams);
+        return;
+      }
       if (resp.type === "TORRENTIO_ERROR") {
         setModalBody(`
           <div class="torbox-error">⚠ ${escapeHtml(resp.message)}</div>

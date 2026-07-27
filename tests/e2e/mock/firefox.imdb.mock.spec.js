@@ -5,7 +5,7 @@ import fs from 'fs';
 const torrentioMock = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../mocks/torrentio.json'), 'utf-8'));
 const torboxMock = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../mocks/torbox.json'), 'utf-8'));
 
-test.describe('IMDb Offline Mocked Extension Flow', () => {
+test.describe('Firefox Offline IMDb Mocked Suite', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('https://www.imdb.com/title/tt1375666/', route => {
       route.fulfill({
@@ -38,7 +38,7 @@ test.describe('IMDb Offline Mocked Extension Flow', () => {
     });
   });
 
-  test('should render extension injected button and stream list modal', async ({ page }) => {
+  test('should render extension injected button and stream list modal in Firefox', async ({ page }) => {
     await page.addInitScript(() => {
       window.chrome = window.chrome || {};
       window.chrome.runtime = window.chrome.runtime || { sendMessage: () => {}, onMessage: { addListener: () => {} } };

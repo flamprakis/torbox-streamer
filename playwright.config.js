@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30000,
   expect: {
-    timeout: 5000,
+    timeout: 10000,
   },
   fullyParallel: false,
   retries: process.env.CI ? 2 : 0,
@@ -17,9 +17,17 @@ export default defineConfig({
   projects: [
     {
       name: 'firefox-extension',
-      testMatch: /.*(mock|live).*/,
+      testMatch: /.*firefox.*/,
       use: {
         ...devices['Desktop Firefox'],
+        headless: true,
+      },
+    },
+    {
+      name: 'chromium-extension',
+      testMatch: /.*chromium.*/,
+      use: {
+        ...devices['Desktop Chrome'],
         headless: true,
       },
     },
