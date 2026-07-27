@@ -18,10 +18,24 @@ describe('Native Messaging Host & Installer Suite', () => {
     expect(installPy).toContain(extensionId);
   });
 
-  it('should not contain Chrome-only "allowed_origins": key in Firefox manifest templates', () => {
-    expect(installSh).not.toContain('"allowed_origins":');
-    expect(installBat).not.toContain('"allowed_origins":');
-    expect(installPy).not.toContain('"allowed_origins":');
+  it('should separate Gecko allowed_extensions from Chromium allowed_origins', () => {
+    expect(installSh).toContain('allowed_extensions');
+    expect(installSh).toContain('allowed_origins');
+
+    expect(installBat).toContain('allowed_extensions');
+    expect(installBat).toContain('allowed_origins');
+
+    expect(installPy).toContain('allowed_extensions');
+    expect(installPy).toContain('allowed_origins');
+  });
+
+  it('should support browser auto-detection and interactive selection flags in install.py and install.sh', () => {
+    expect(installPy).toContain('--all');
+    expect(installPy).toContain('--browser');
+    expect(installPy).toContain('get_known_browsers');
+
+    expect(installSh).toContain('--all');
+    expect(installSh).toContain('DETECTED_NAMES');
   });
 
   it('should support MPV and VLC player actions in native_host.py', () => {

@@ -36,10 +36,10 @@ if defined HOST_EXE (
 :: Escape backslashes for JSON
 set "ESCAPED_EXEC=%FINAL_EXEC:\=\\%"
 
-set "MANIFEST_PATH=%TARGET_DIR%\com.torbox_streamer.host.json"
+set "GECKO_MANIFEST=%TARGET_DIR%\com.torbox_streamer.host.firefox.json"
+set "CHROMIUM_MANIFEST=%TARGET_DIR%\com.torbox_streamer.host.chrome.json"
 
-:: NOTE: Do NOT add "allowed_origins" — that is a Chrome-only field.
-:: Firefox/Waterfox schema validation silently rejects manifests with unknown properties.
+:: Write Gecko Manifest (Firefox, Waterfox, Zen)
 (
     echo {
     echo   "name": "com.torbox_streamer.host",
@@ -50,20 +50,33 @@ set "MANIFEST_PATH=%TARGET_DIR%\com.torbox_streamer.host.json"
     echo     "torbox-streamer@flamprakis.com"
     echo   ]
     echo }
-) > "%MANIFEST_PATH%"
+) > "%GECKO_MANIFEST%"
 
-echo [OK] Created native host manifest at: %MANIFEST_PATH%
+:: Write Chromium Manifest (Chrome, Brave, Edge)
+(
+    echo {
+    echo   "name": "com.torbox_streamer.host",
+    echo   "description": "TorBox Streamer Native Messaging Host",
+    echo   "path": "!ESCAPED_EXEC!",
+    echo   "type": "stdio",
+    echo   "allowed_origins": [
+    echo     "chrome-extension://*/"
+    echo   ]
+    echo }
+) > "%CHROMIUM_MANIFEST%"
 
-:: Register Registry Keys for Firefox, Waterfox, Zen, Chrome, Brave
-set "REG_PATH=HKCU\Software\Mozilla\NativeMessagingHosts\com.torbox_streamer.host"
-REG ADD "%REG_PATH%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
+echo [OK] Created native host manifests in %TARGET_DIR%
+
+:: Register Registry Keys for Firefox & Chrome families
+set "REG_PATH_MOZILLA=HKCU\Software\Mozilla\NativeMessagingHosts\com.torbox_streamer.host"
+REG ADD "%REG_PATH_MOZILLA%" /ve /t REG_SZ /d "%GECKO_MANIFEST%" /f >nul 2>&1
 
 set "REG_PATH_CHROME=HKCU\Software\Google\Chrome\NativeMessagingHosts\com.torbox_streamer.host"
-REG ADD "%REG_PATH_CHROME%" /ve /t REG_SZ /d "%MANIFEST_PATH%" /f >nul 2>&1
+REG ADD "%REG_PATH_CHROME%" /ve /t REG_SZ /d "%CHROMIUM_MANIFEST%" /f >nul 2>&1
 
 echo.
 echo ======================================================
-echo  [SUCCESS] Native Host installed successfully!
+echo  [SUCCESS] Native Host registered successfully!
 echo  You can now launch MPV / VLC directly from TorBox Streamer.
 echo ======================================================
 echo.
