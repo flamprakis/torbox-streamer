@@ -52,7 +52,7 @@ function connectNativeHelper() {
   }
 }
 
-async function tryLaunchPlayer(streamUrl, player = "mpv") {
+async function tryLaunchPlayer(streamUrl, player = "mpv", subtitles = []) {
   const config = await getConfig();
   const customPath = player === "vlc" ? config.vlc_path : config.mpv_path;
 
@@ -76,7 +76,7 @@ async function tryLaunchPlayer(streamUrl, player = "mpv") {
         }
       });
 
-      port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl });
+      port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl, subtitles });
     } catch (e) {
       resolve(false);
     }
@@ -352,13 +352,13 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
 
     case "TRY_MPV":
-      tryLaunchPlayer(msg.url, "mpv").then(success => {
+      tryLaunchPlayer(msg.url, "mpv", msg.subtitles || []).then(success => {
         sendResponse({ success });
       });
       return true;
 
     case "TRY_PLAYER":
-      tryLaunchPlayer(msg.url, msg.player || "mpv").then(success => {
+      tryLaunchPlayer(msg.url, msg.player || "mpv", msg.subtitles || []).then(success => {
         sendResponse({ success });
       });
       return true;

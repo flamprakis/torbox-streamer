@@ -216,6 +216,52 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  // Drag and Drop Subtitle File Support (.srt / .vtt)
+  video.addEventListener("dragover", (e) => {
+    e.preventDefault();
+  });
+
+  video.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    if (!e.dataTransfer || !e.dataTransfer.files.length) return;
+
+    const file = e.dataTransfer.files[0];
+    if (!file.name.endsWith(".srt") && !file.name.endsWith(".vtt")) {
+      alert("Please drop a valid .srt or .vtt subtitle file.");
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      const vttContent = file.name.endsWith(".vtt") ? text : parseSrtToVtt(text);
+      const blob = new Blob([vttContent], { type: "text/vtt" });
+      if (activeTrackBlobUrl) URL.revokeObjectURL(activeTrackBlobUrl);
+      activeTrackBlobUrl = URL.createObjectURL(blob);
+
+      const existingTracks = video.querySelectorAll("track");
+      existingTracks.forEach(t => t.remove());
+
+      const track = document.createElement("track");
+      track.kind = "subtitles";
+      track.label = `Local: ${file.name}`;
+      track.srclang = "custom";
+      track.src = activeTrackBlobUrl;
+      track.default = true;
+
+      video.appendChild(track);
+
+      if (subSelect) {
+        const opt = document.createElement("option");
+        opt.value = currentSubtitles.length;
+        opt.textContent = `Local: ${file.name}`;
+        opt.selected = true;
+        subSelect.appendChild(opt);
+      }
+    } catch (err) {
+      alert("Failed to load local subtitle file.");
+    }
+  });
+
   btnDelete.addEventListener("click", async () => {
     if (!torrentId) return;
     if (confirm("Are you sure you want to delete this torrent from TorBox?")) {
