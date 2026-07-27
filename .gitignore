@@ -18,6 +18,9 @@ playwright-report/
 .vitest/
 *.log
 
+# Local Developer Guides
+TESTING_GUIDE.md
+
 # OS & Editor Files
 .DS_Store
 .vscode/
