@@ -1,12 +1,12 @@
 # TorBox Streamer 🍿
 
-[![Version](https://img.shields.io/badge/version-2.0.1-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
+[![Version](https://img.shields.io/badge/version-2.0.2-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Browser Support](https://img.shields.io/badge/browsers-Firefox%20%7C%20Zen%20%7C%20Waterfox%20%7C%20Chrome%20%7C%20Brave-orange.svg)](#installation)
+[![Browser Support](https://img.shields.io/badge/browsers-Firefox%20%7C%20Waterfox%20%7C%20LibreWolf%20%7C%20Zen%20%7C%20Chrome%20%7C%20Brave%20%7C%20Edge-orange.svg)](#installation)
 [![TorBox](https://img.shields.io/badge/service-TorBox.app-teal.svg)](https://torbox.app)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/flamprakis)
 
-**Stream movies & TV shows directly from IMDb pages using Torrentio + TorBox in your browser or with MPV / VLC.**
+**Stream movies & TV shows directly from IMDb and TMDB pages using Torrentio + TorBox in your browser or with MPV / VLC.**
 
 TorBox Streamer is a **pure, self-contained browser extension**. No complex background daemons or terminal commands required for standard in-browser playback!
 
@@ -14,66 +14,67 @@ TorBox Streamer is a **pure, self-contained browser extension**. No complex back
 
 ## ✨ Features
 
-- 🍿 **Direct IMDb Integration** — Injects a sleek **"Play Now"** button on movie and TV show IMDb pages.
+- 🍿 **Direct IMDb & TMDB Integration** — Injects a sleek **"Play Now"** action button on movie and TV show title pages.
 - ⚡ **Instant Cache Checking** — Queries TorBox cache in parallel to find instantly streamable torrents.
 - 🎬 **In-Browser Player Tab** — Built-in dark-themed HTML5 player tab for compatible videos (`.mp4`, `.webm`).
-- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch streams into **MPV** or **VLC** on Windows, Linux, or macOS.
+- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch high-bitrate streams into **MPV** or **VLC** on Linux, macOS, or Windows.
 - 🎛️ **In-Modal Player Switcher** — Toggle between `Auto`, `Browser`, `MPV`, and `VLC` right inside the stream selection modal.
-- 📺 **Series Episode Matcher** — Automatically detects season/episode formats (`S01E01`, `1x01`) and picks the matching file.
-- 🧹 **File & Account Management** — Automatic trash/`.nfo` file filtering, and 1-click torrent deletion from TorBox when done.
+- ⚙️ **Quick Options Button** — Dedicated ⚙️ settings button inside the stream modal and popup menu for fast options access.
+- 📺 **Series Episode Matcher** — Automatically detects season/episode formats (`S01E01`, `1x01`) and picks matching files.
+- 🧹 **File & Account Management** — Automatic trash/`.nfo` filtering, and 1-click torrent deletion from TorBox when done.
+- 🌐 **Cross-Browser Support** — Compatible with Firefox, Waterfox, LibreWolf, Zen Browser, Google Chrome, Brave, and Edge.
 - 💻 **Standalone CLI Included** — Terminal enthusiasts can also stream directly using the included `cli/` tool.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### Step 1: Install Browser Extension
-1. Download `torbox-streamer-v2.0.0.zip` (or signed `.xpi`) from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
-2. Install in your browser:
-   - **Firefox / Zen / Waterfox**: Drag & drop the `.xpi` file into your browser (or load zip via `about:debugging#/runtime/this-firefox`).
-   - **Chrome / Brave / Chromium**: Open `chrome://extensions` → Enable **Developer mode** → Click **Load unpacked** → Select the `extension/` folder.
-3. Add your free TorBox API Key in the extension options page ([Get API Key](https://torbox.app/settings)).
+### Step 1: Install Extension
+Download the appropriate release package from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases):
+
+- **Firefox / Waterfox / LibreWolf / Zen**:
+  - Install directly from [Firefox Add-ons (AMO)](https://addons.mozilla.org) or download `torbox-streamer-firefox-v2.0.2.zip`.
+  - Open `about:debugging#/runtime/this-firefox` → Click **Load Temporary Add-on...** → Select `manifest.json`.
+- **Chrome / Brave / Chromium / Edge**:
+  - Download `torbox-streamer-chrome-v2.0.2.zip` and extract it.
+  - Open `chrome://extensions` → Enable **Developer mode** → Click **Load unpacked** → Select the extracted folder.
+
+### Step 2: Configure API Key
+Open extension settings by clicking the ⚙️ icon or the extension toolbar icon, and enter your free TorBox API Key ([Get API Key](https://torbox.app/settings)).
 
 ---
 
 ## 🍿 Optional: 1-Click Setup for MPV / VLC Desktop Launching
 
-If you want heavy high-bitrate `.mkv` files, surround sound, or HDR to launch directly into **MPV** or **VLC** on your desktop, run the 1-click setup installer (**Zero Python required!**):
+If you want heavy high-bitrate `.mkv` files, surround sound, or HDR to launch directly into **MPV** or **VLC** on your desktop, run the smart auto-detect installer:
 
-### Windows (1-Click Setup)
-1. Download the release files from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
-2. Double-click **`helpers/install.bat`**.
-
-### Linux & macOS (1-Click Setup)
+### Linux / macOS (Smart Setup)
 Run the setup script in your terminal:
 ```bash
 ./helpers/install.sh
 ```
 
-Now, when selecting a stream on IMDb, choose **MPV** or **VLC** from the modal player bar, or set your preference in Extension Options!
+### Windows (Smart Setup)
+Double-click **`helpers/install.bat`** (or run `python3 helpers/install.py`).
+
+The installer auto-detects installed browsers on your system and configures native host manifests for Firefox and Chrome families automatically!
 
 ---
 
-## 🛠️ Source Setup & Developer Guide (No Prebuilt Binaries)
+## 🛠️ Source Setup & Developer Guide
 
-For developers or users who clone the repository and want to run directly from source code without using prebuilt binaries:
+For developers who clone the repository and want to run directly from source:
 
-### 1. Clone Repository
 ```bash
 git clone https://github.com/flamprakis/torbox-streamer.git
 cd torbox-streamer
-```
 
-### 2. Load Extension Source
-- **Firefox / Zen / Waterfox**: Open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on...** → Select `extension/manifest.json`.
-- **Chrome / Brave**: Open `chrome://extensions` → **Load unpacked** → Select `extension/`.
+# Run automated Vitest unit suite and Playwright Firefox/Chrome E2E suite
+npm test
 
-### 3. Register Native Host via Python
-Ensure Python 3 is installed, then run:
-```bash
-python3 helpers/install.py
+# Build release zip assets in build/
+python3 package.py
 ```
-This registers `helpers/native_host.py` directly with your browser's native messaging configuration without needing prebuilt binary files.
 
 ---
 
@@ -82,8 +83,8 @@ This registers `helpers/native_host.py` directly with your browser's native mess
 | Mode | Format Support | External Player | Setup |
 | :--- | :--- | :--- | :--- |
 | **Browser Tab** 🎬 | `.mp4`, `.webm`, `.mov` | None (In-Browser) | **Zero setup required.** Works out of the box! |
-| **MPV** 🍿 | All formats (`.mkv`, `.avi`, HDR, etc.) | MPV Player | Run `install.bat` (Windows) or `install.sh` (Linux/Mac). |
-| **VLC** 🟧 | All formats (`.mkv`, `.avi`, multi-audio) | VLC Media Player | Run `install.bat` (Windows) or `install.sh` (Linux/Mac). |
+| **MPV** 🍿 | All formats (`.mkv`, `.avi`, HDR, etc.) | MPV Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
+| **VLC** 🟧 | All formats (`.mkv`, `.avi`, multi-audio) | VLC Media Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
 | **Auto** ⚡ | Dynamic | Auto-selects | Uses Browser Tab for `.mp4` and MPV/VLC for `.mkv`. |
 
 ---
@@ -92,40 +93,42 @@ This registers `helpers/native_host.py` directly with your browser's native mess
 
 ```
 torbox-streamer/
-├── extension/                  # Pure Browser Extension (v2.0)
+├── extension/                  # Pure WebExtension Source
 │   ├── manifest.json
 │   ├── background.js           # Background worker & stream router
 │   ├── torbox_api.js           # TorBox JS client & auto file picker
-│   ├── content.js              # IMDb page injection & stream picker UI
+│   ├── content.js              # IMDb & TMDB page injection UI
 │   ├── options/                # Extension settings UI
 │   └── player/                 # Internal tab video player
 ├── helpers/                    # MPV / VLC Launcher Helper & Installers
-│   ├── install.bat             # 1-Click Windows installer (No Python needed)
-│   ├── install.sh              # 1-Click Linux / macOS installer script
-│   ├── install.py              # Cross-platform Python source installer
+│   ├── install.sh              # Bash installer with browser auto-detection
+│   ├── install.bat             # Windows batch installer & registry setup
+│   ├── install.py              # Cross-platform Python installer & CLI flags
 │   └── native_host.py          # Native messaging bridge source
+├── tests/                      # Automated Test Framework
+│   ├── unit/                   # Vitest unit test suite (28 tests)
+│   └── e2e/                    # Playwright Firefox E2E suite
 ├── cli/                        # Standalone Terminal CLI Tool
-│   ├── cli.py                  # Stream directly from terminal
-│   ├── torbox_client.py
-│   └── config.py
-├── package.py                  # Extension release zip builder
-└── .github/workflows/          # GitHub Actions matrix build & release workflow
+├── package.py                  # Dual release zip builder (Firefox MV2 & Chrome MV3)
+└── .github/workflows/          # GitHub Actions CI matrix workflow
 ```
 
 ---
 
-## 🗺️ Future Roadmap
+## 🗺️ Feature Roadmap
 
-- [ ] 💬 **Subtitles Support**: Integrated subtitle fetching (OpenSubtitles API / TorBox subs) for in-browser player tab, MPV, and VLC.
-- [ ] 🔌 **Multi-Debrid Integration**: Add support for additional debrid services (RealDebrid, AllDebrid, Premiumize) alongside TorBox.
-- [ ] 🌐 **Multi-Platform Support**: Expand site injection to TMDB, Trakt, Letterboxd, and AniList.
-- [ ] 🎨 **Custom Subtitle Styling**: Configurable font size, language preferences, and subtitle offset controls.
+- [x] 🍿 **v2.0.0** — IMDb injection & Pure Extension architecture
+- [x] 🌐 **v2.0.1** — TMDB site integration & Playwright testing framework
+- [x] ⚡ **v2.0.2** — Multi-browser auto-detection installer & dual Firefox (MV2) / Chrome (MV3) packaging
+- [ ] 💬 **v2.1.0** — **Subtitle Integration**: Auto-fetch English + browser language subtitles, in-browser player WebVTT track selector, and `--sub-file` passing for MPV & VLC
+- [ ] 📺 **v2.2.0** — **Trakt Integration**: Trakt OAuth2 login and watch status scrobbling
+- [ ] 🔌 **v2.3.0** — **Multi-Debrid**: Support RealDebrid, AllDebrid, and Premiumize alongside TorBox
 
 ---
 
 ## ☕ Support Development
 
-If you find **TorBox Streamer** useful and want to support ongoing development (subtitles, multi-debrid, TMDB support):
+If you find **TorBox Streamer** useful and want to support ongoing development:
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/flamprakis)
 
@@ -133,4 +136,5 @@ If you find **TorBox Streamer** useful and want to support ongoing development (
 
 ## 📜 License
 
-Distributed under the MIT License. See `LICENSE` for details.
+Distributed under the MIT License. See [`LICENSE`](LICENSE) for details.
+Copyright (c) 2026 flamprakis.
