@@ -963,8 +963,12 @@
       <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px;">
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
           <button class="torbox-btn torbox-btn-primary" id="torbox-try-browser-btn">🌐 Open in Browser Tab</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">🚀 Open in MPV</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">🍊 Open in VLC</button>
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:text-bottom;margin-right:4px;"><circle cx="12" cy="12" r="11" fill="#8d004e"/><circle cx="12" cy="12" r="8.5" stroke="#ffffff" stroke-width="1.5" fill="none"/><path d="M10 8.5l5.5 3.5-5.5 3.5v-7z" fill="#ffffff"/></svg>Open in MPV
+          </button>
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">
+            <svg width="15" height="15" viewBox="0 0 24 24" style="vertical-align:text-bottom;margin-right:4px;"><path d="M10.5 2h3l1.8 6.5h-6.6L10.5 2z" fill="#ff7f00"/><path d="M7.8 10.5h8.4l1.2 4H6.6l1.2-4z" fill="#ffffff"/><path d="M8.7 8.5h6.6l.9 3.5H7.8l.9-3.5z" fill="#ff7f00"/><path d="M5.4 16h13.2l1.4 4.5H4L5.4 16z" fill="#ff7f00"/><path d="M6.6 14.5h10.8l.9 3H5.7l.9-3z" fill="#ffffff"/><path d="M2 21h20v1.5H2V21z" fill="#d96600"/></svg>Open in VLC
+          </button>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
           <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>

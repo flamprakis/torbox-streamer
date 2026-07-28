@@ -572,6 +572,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  const MPV_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:text-bottom;margin-right:3px;"><circle cx="12" cy="12" r="11" fill="#8d004e"/><circle cx="12" cy="12" r="8.5" stroke="#ffffff" stroke-width="1.5" fill="none"/><path d="M10 8.5l5.5 3.5-5.5 3.5v-7z" fill="#ffffff"/></svg>MPV';
+  const VLC_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:text-bottom;margin-right:3px;"><path d="M10.5 2h3l1.8 6.5h-6.6L10.5 2z" fill="#ff7f00"/><path d="M7.8 10.5h8.4l1.2 4H6.6l1.2-4z" fill="#ffffff"/><path d="M8.7 8.5h6.6l.9 3.5H7.8l.9-3.5z" fill="#ff7f00"/><path d="M5.4 16h13.2l1.4 4.5H4L5.4 16z" fill="#ff7f00"/><path d="M6.6 14.5h10.8l.9 3H5.7l.9-3z" fill="#ffffff"/><path d="M2 21h20v1.5H2V21z" fill="#d96600"/></svg>VLC';
+
   if (btnMpv) {
     btnMpv.addEventListener("click", async () => {
       if (!streamUrl) return;
@@ -585,7 +588,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         btnMpv.textContent = "MPV missing";
         alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
       }
-      setTimeout(() => btnMpv.textContent = "🚀 MPV", 3000);
+      setTimeout(() => btnMpv.innerHTML = MPV_SVG, 3000);
     });
   }
 
@@ -602,7 +605,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         btnVlc.textContent = "VLC missing";
         alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
       }
-      setTimeout(() => btnVlc.textContent = "🍊 VLC", 3000);
+      setTimeout(() => btnVlc.innerHTML = VLC_SVG, 3000);
     });
   }
 
