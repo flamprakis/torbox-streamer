@@ -24,7 +24,7 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Browsers (Firefox & Chromium)
-        run: npx playwright install firefox chromium --with-deps
+        run: sudo npx playwright install firefox chromium --with-deps
 
       - name: Setup Python
         uses: actions/setup-python@v5
