@@ -148,16 +148,21 @@ def pick_file(files: list[TorrentFile], episode_hint: str = "") -> TorrentFile |
         print(colored("  Invalid choice, try again.", C.RED))
 
 
-def launch_mpv(url: str, mpv_path: str = "mpv"):
-    """Launch mpv with the stream URL."""
+def launch_mpv(url: str, mpv_path: str = "mpv", headers: dict = None):
+    """Launch mpv with the stream URL and optional HTTP headers."""
     print()
     print(colored(f"  🚀 Launching mpv...", C.GREEN + C.BOLD))
     print(colored(f"  URL: {url[:80]}...", C.DIM))
     print()
 
+    cmd = [mpv_path, "--force-window=yes", url]
+    if headers and isinstance(headers, dict):
+        header_strs = [f"{k}: {v}" for k, v in headers.items()]
+        cmd.append(f"--http-header-fields={','.join(header_strs)}")
+
     try:
         subprocess.Popen(
-            [mpv_path, "--force-window=yes", url],
+            cmd,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
