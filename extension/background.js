@@ -347,7 +347,9 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
 
   let launchMethod = "browser"; // default
 
-  if (config.playerPref === "vlc") {
+  if (config.playerPref === "ask") {
+    launchMethod = "ask";
+  } else if (config.playerPref === "vlc") {
     const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc", subUrls);
     launchMethod = vlcSuccess ? "vlc" : "url_only";
   } else if (config.playerPref === "mpv") {

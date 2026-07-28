@@ -817,8 +817,8 @@
     html += `</div>`;
 
     html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Player</span>`;
-    ["auto", "browser", "mpv", "vlc"].forEach(p => {
-      const label = p === "auto" ? "Auto" : p.toUpperCase();
+    ["auto", "ask", "browser", "mpv", "vlc"].forEach(p => {
+      const label = p === "auto" ? "Auto" : (p === "ask" ? "ASK" : p.toUpperCase());
       const active = activeFilters.playerPref === p ? "active" : "";
       html += `<button class="torbox-filter-btn ${active}" data-filter-player="${p}">${label}</button>`;
     });
@@ -937,84 +937,83 @@
   function handleStreamSuccess(data) {
     currentTorrentId = data.torrent_id;
 
+    let statusIcon = "🎬";
+    let statusText = "Stream Ready!";
+
     if (data.method === "browser") {
-      setModalBody(`
-        <div class="torbox-success">
-          <p style="font-size:28px;margin-bottom:8px;">🎬</p>
-          <p><strong>Playing in Browser Tab!</strong></p>
-          <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
+      statusIcon = "🎬";
+      statusText = "Playing in Browser Tab!";
+    } else if (data.method === "mpv") {
+      statusIcon = "🍿";
+      statusText = "Playing in MPV!";
+    } else if (data.method === "vlc") {
+      statusIcon = "🟧";
+      statusText = "Playing in VLC!";
+    } else if (data.method === "ask") {
+      statusIcon = "⚡";
+      statusText = "Stream Ready — Choose Player!";
+    }
+
+    setModalBody(`
+      <div class="torbox-success">
+        <p style="font-size:28px;margin-bottom:8px;">${statusIcon}</p>
+        <p><strong>${statusText}</strong></p>
+        <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-browser-btn">🌐 Open in Browser Tab</button>
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">🚀 Open in MPV</button>
+          <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">🍊 Open in VLC</button>
         </div>
-        <div style="text-align:center;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
           <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">Open in MPV</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">Open in VLC</button>
-          <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
+          <button class="torbox-btn torbox-btn-secondary" id="torbox-copy-btn">📋 Copy Stream Link</button>
+          <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">🗑️ Delete Torrent</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
         </div>
-      `);
-      document.getElementById("torbox-try-mpv-btn").addEventListener("click", async () => {
-        const mpvBtn = document.getElementById("torbox-try-mpv-btn");
-        mpvBtn.textContent = "Launching MPV...";
-        const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: data.url });
-        if (resp && resp.success) {
-          mpvBtn.textContent = "Launched in MPV! 🍿";
-        } else {
-          alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
-          mpvBtn.textContent = "Open in MPV";
-        }
+      </div>
+    `);
+
+    document.getElementById("torbox-try-browser-btn").addEventListener("click", async () => {
+      await browser.runtime.sendMessage({
+        type: "OPEN_PLAYER_TAB",
+        url: data.url,
+        title: data.file_name,
+        torrentId: data.torrent_id,
       });
-      document.getElementById("torbox-try-vlc-btn").addEventListener("click", async () => {
-        const vlcBtn = document.getElementById("torbox-try-vlc-btn");
-        vlcBtn.textContent = "Launching VLC...";
-        const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: data.url });
-        if (resp && resp.success) {
-          vlcBtn.textContent = "Launched in VLC! 🍿";
-        } else {
-          alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
-          vlcBtn.textContent = "Open in VLC";
-        }
-      });
-    } else if (data.method === "mpv" || data.method === "vlc") {
-      const icon = data.method === "vlc" ? "🟧" : "🍿";
-      const name = data.method.toUpperCase();
-      setModalBody(`
-        <div class="torbox-success">
-          <p style="font-size:28px;margin-bottom:8px;">${icon}</p>
-          <p><strong>Playing in ${name}!</strong></p>
-          <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
-        </div>
-        <div style="text-align:center;">
-          <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-try-browser-btn">Open in Browser Tab</button>
-          <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
-          <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
-        </div>
-      `);
-      document.getElementById("torbox-try-browser-btn").addEventListener("click", async () => {
-        await browser.runtime.sendMessage({
-          type: "OPEN_PLAYER_TAB",
-          url: data.url,
-          title: data.file_name,
-          torrentId: data.torrent_id,
-        });
-      });
-    } else {
-      // URL only / fallback
-      setModalBody(`
-        <div class="torbox-success" style="background:#333;">
-          <p>Stream ready. Copy the stream URL:</p>
-        </div>
-        <textarea readonly style="width:100%;height:60px;background:#111;color:#aaa;border:1px solid #444;border-radius:6px;padding:8px;font-size:11px;resize:none;">${escapeHtml(data.url)}</textarea>
-        <div style="text-align:center;margin-top:8px;">
-          <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
-          <button class="torbox-btn torbox-btn-primary" id="torbox-copy-btn">Copy URL</button>
-          <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
-          <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
-        </div>
-      `);
-      document.getElementById("torbox-copy-btn").addEventListener("click", () => {
+    });
+
+    document.getElementById("torbox-try-mpv-btn").addEventListener("click", async () => {
+      const mpvBtn = document.getElementById("torbox-try-mpv-btn");
+      mpvBtn.textContent = "Launching MPV...";
+      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: data.url });
+      if (resp && resp.success) {
+        mpvBtn.textContent = "Launched in MPV! 🍿";
+      } else {
+        alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
+        mpvBtn.textContent = "🚀 Open in MPV";
+      }
+    });
+
+    document.getElementById("torbox-try-vlc-btn").addEventListener("click", async () => {
+      const vlcBtn = document.getElementById("torbox-try-vlc-btn");
+      vlcBtn.textContent = "Launching VLC...";
+      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: data.url });
+      if (resp && resp.success) {
+        vlcBtn.textContent = "Launched in VLC! 🍿";
+      } else {
+        alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
+        vlcBtn.textContent = "🍊 Open in VLC";
+      }
+    });
+
+    const copyBtn = document.getElementById("torbox-copy-btn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => {
         navigator.clipboard.writeText(data.url);
-        document.getElementById("torbox-copy-btn").textContent = "Copied!";
+        copyBtn.textContent = "Copied!";
+        setTimeout(() => copyBtn.textContent = "📋 Copy Stream Link", 2000);
       });
     }
 
