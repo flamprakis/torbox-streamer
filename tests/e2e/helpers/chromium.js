@@ -10,7 +10,7 @@ export const test = base.extend({
     const tmpUserData = fs.mkdtempSync(path.join(os.tmpdir(), 'pw-chrome-'));
 
     const browserContext = await chromium.launchPersistentContext(tmpUserData, {
-      headless: false,
+      headless: true,
       args: [
         `--disable-extensions-except=${chromeExtDir}`,
         `--load-extension=${chromeExtDir}`,

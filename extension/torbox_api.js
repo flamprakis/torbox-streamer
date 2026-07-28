@@ -170,13 +170,17 @@ function parseTorrent(raw) {
       fileId = f.id;
     } else if (typeof f.file_id === "number") {
       fileId = f.file_id;
-    } else if (typeof f.id === "string" && !isNaN(parseInt(f.id))) {
+    } else if (f.id != null && !isNaN(parseInt(f.id))) {
       fileId = parseInt(f.id);
+    } else if (f.file_id != null && !isNaN(parseInt(f.file_id))) {
+      fileId = parseInt(f.file_id);
     }
+    const fileName = f.name || f.short_name || f.path || f.s3_path || f.filename || "";
     return {
       id: fileId,
-      name: f.name || "",
-      short_name: f.short_name || "",
+      file_id: fileId,
+      name: fileName,
+      short_name: f.short_name || fileName,
       size: f.size || 0,
       size_human: humanSize(f.size || 0),
     };

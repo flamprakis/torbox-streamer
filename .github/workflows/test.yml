@@ -26,10 +26,18 @@ jobs:
       - name: Install Playwright Firefox Browser
         run: npx playwright install firefox --with-deps
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python CLI Dependencies
+        run: pip install -r cli/requirements.txt
+
       - name: Run Unit Tests
         run: npm run test:unit
 
-      - name: Run Playwright Firefox E2E Tests (Mocked)
+      - name: Run E2E Test Suite (Playwright Mocked + Native Host & CLI)
         run: npm run test:e2e
 
       - name: Upload Playwright Test Artifacts on Failure

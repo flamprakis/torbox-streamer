@@ -2,28 +2,41 @@ var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : g
 
 function srtToVtt(srtText, delaySec = 0) {
   if (!srtText) return "WEBVTT\n\n";
-  let vtt = "WEBVTT\n\n";
-  const cleanText = srtText.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const blocks = cleanText.trim().split(/\n\s*\n/);
+  if (srtText.trim().startsWith("WEBVTT")) {
+    return srtText;
+  }
 
+  let vtt = "WEBVTT\n\n";
+  const clean = srtText.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const timeRegex = /(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{1,3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[.,](\d{1,3})/;
+
+  const blocks = clean.split(/\n\s*\n/);
   for (const block of blocks) {
     const lines = block.trim().split("\n");
-    if (lines.length < 2) continue;
+    let timeIdx = -1;
 
-    let timeLineIdx = 0;
-    if (/^\d+$/.test(lines[0].trim())) {
-      timeLineIdx = 1;
+    for (let i = 0; i < lines.length; i++) {
+      if (timeRegex.test(lines[i])) {
+        timeIdx = i;
+        break;
+      }
     }
-    if (lines.length <= timeLineIdx || !lines[timeLineIdx].includes("-->")) continue;
 
-    let timeLine = lines[timeLineIdx].replace(/,/g, ".");
+    if (timeIdx === -1) continue;
+
+    let timeLine = lines[timeIdx].replace(/,/g, ".");
     if (delaySec !== 0) {
       timeLine = adjustVttTimeline(timeLine, delaySec);
     }
 
-    const cueText = lines.slice(timeLineIdx + 1).join("\n");
-    vtt += `${timeLine}\n${cueText}\n\n`;
+    const textLines = lines.slice(timeIdx + 1).filter(l => !/^\d+$/.test(l.trim()));
+    const cueText = textLines.join("\n").replace(/\{[^}]+\}/g, "").trim();
+
+    if (cueText) {
+      vtt += `${timeLine}\n${cueText}\n\n`;
+    }
   }
+
   return vtt;
 }
 
@@ -62,9 +75,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   const streamTitle = params.get("title") || "Stream";
   const torrentId = params.get("torrent_id");
   const imdbId = params.get("imdb_id");
-  const season = parseInt(params.get("season")) || 1;
-  const episode = parseInt(params.get("episode")) || 1;
   const mediaType = params.get("media_type") || "movie";
+  const isSeries = mediaType === "series";
+  const season = isSeries ? (parseInt(params.get("season")) || 1) : null;
+  const episode = isSeries ? (parseInt(params.get("episode")) || 1) : null;
 
   const video = document.getElementById("video-player");
   const titleEl = document.getElementById("title");
@@ -112,20 +126,52 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   };
 
-  // Load Subtitles
-  if (imdbId) {
-    try {
-      const config = await storage.get(["subtitle_languages"]);
-      const prefLangsStr = config.subtitle_languages || "en, browser";
+  const btnReloadSubs = document.getElementById("btn-reload-subs");
 
-      const prefLangs = parsePreferredLanguages(prefLangsStr, navigator.language);
-      currentSubtitles = await fetchSubtitles(imdbId, season, episode, mediaType, prefLangs);
+  async function initSubtitles() {
+    if (subSelect) {
+      subSelect.innerHTML = '<option value="">Off</option>';
+    }
+
+    try {
+      const stored = await storage.get(["torbox_api_key", "subtitle_languages", "player_bundled_subtitles", "last_stream_metadata"]);
+      const apiKey = stored.torbox_api_key;
+      let bundled = stored.player_bundled_subtitles || [];
+
+      const lastMeta = stored.last_stream_metadata || {};
+      const effectiveImdbId = imdbId || lastMeta.imdb_id || "";
+      const effectiveMediaType = mediaType || lastMeta.media_type || "movie";
+      const effectiveSeason = season || lastMeta.season || 1;
+      const effectiveEpisode = episode || lastMeta.episode || 1;
+      const effectiveTorrentId = torrentId || lastMeta.torrent_id || "";
+
+      const prefLangsStr = stored.subtitle_languages || "en, browser";
+      const prefLangs = typeof parsePreferredLanguages === "function"
+        ? parsePreferredLanguages(prefLangsStr, navigator.language)
+        : ["en"];
+
+      // Failsafe: Fetch torrent file list directly from TorBox API if storage is empty or incomplete
+      if (bundled.length === 0 && effectiveTorrentId && apiKey && typeof torboxGetTorrentList === "function") {
+        try {
+          const torrents = await torboxGetTorrentList(apiKey, effectiveTorrentId);
+          if (torrents && torrents.length > 0 && torrents[0].files) {
+            bundled = extractBundledSubtitles(apiKey, effectiveTorrentId, torrents[0].files, prefLangs);
+          }
+        } catch (err) {}
+      }
+
+      let external = [];
+      if (effectiveImdbId) {
+        external = await fetchSubtitles(effectiveImdbId, effectiveSeason, effectiveEpisode, effectiveMediaType, prefLangs);
+      }
+
+      currentSubtitles = [...bundled, ...external];
 
       if (currentSubtitles.length > 0 && subSelect) {
         currentSubtitles.forEach((sub, idx) => {
           const opt = document.createElement("option");
           opt.value = idx;
-          opt.textContent = `${sub.label} (${sub.lang.toUpperCase()})`;
+          opt.textContent = sub.label;
           subSelect.appendChild(opt);
         });
 
@@ -134,6 +180,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         await loadSelectedSubtitle(0, currentDelay);
       }
     } catch (e) {}
+  }
+
+  await initSubtitles();
+
+  if (btnReloadSubs) {
+    btnReloadSubs.addEventListener("click", async () => {
+      btnReloadSubs.textContent = "⏳";
+      await initSubtitles();
+      btnReloadSubs.textContent = "🔄";
+    });
   }
 
   async function loadSelectedSubtitle(index, delay = 0) {
@@ -162,8 +218,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }
 
-    const srtText = rawSubTexts[sub.url];
-    const vttContent = srtToVtt(srtText, delay);
+    const subText = rawSubTexts[sub.url];
+    let vttContent;
+    if (sub.format === "ass" || sub.format === "ssa") {
+      vttContent = typeof parseAssToVtt === "function" ? parseAssToVtt(subText) : srtToVtt(subText, delay);
+    } else if (sub.format === "vtt") {
+      vttContent = subText;
+    } else {
+      vttContent = srtToVtt(subText, delay);
+    }
+
     const blob = new Blob([vttContent], { type: "text/vtt;charset=utf-8" });
     activeTrackBlobUrl = URL.createObjectURL(blob);
 

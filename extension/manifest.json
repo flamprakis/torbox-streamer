@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "TorBox Streamer",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "Stream movies and TV shows from IMDb pages via Torrentio + TorBox",
   "author": "torbox-streamer",
 
@@ -60,10 +60,17 @@
     "*://m.imdb.com/*",
     "*://www.themoviedb.org/*",
     "*://torrentio.strem.fun/*",
-    "*://api.torbox.app/*"
+    "*://subtitles.strem.fun/*",
+    "*://opensubtitles.strem.fun/*",
+    "*://*.strem.io/*",
+    "https://*.strem.io/*",
+    "*://*.torbox.app/*",
+    "https://*.torbox.app/*"
   ],
 
   "web_accessible_resources": [
+    "torbox_api.js",
+    "subtitles_api.js",
     "player/player.html",
     "player/player.js",
     "player/player.css"

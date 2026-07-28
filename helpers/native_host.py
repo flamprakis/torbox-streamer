@@ -104,14 +104,30 @@ def main():
                 if isinstance(subtitles, str):
                     subtitles = [subtitles]
 
+                headers = msg.get("headers") or {}
+
+                env = os.environ.copy()
+                env["QT_LOGGING_RULES"] = "*.debug=false;qt.dbusmenu=false"
+                env["NO_AT_BRIDGE"] = "1"
+
                 if player == "vlc":
                     cmd = [player_bin, url]
-                    for sub in subtitles[:1]:
+                    for sub in subtitles[:3]:
                         cmd.append(f"--sub-file={sub}")
+                        cmd.append(f"--input-slave={sub}")
+                    if isinstance(headers, dict):
+                        if "User-Agent" in headers:
+                            cmd.append(f"--http-user-agent={headers['User-Agent']}")
+                        if "Referer" in headers:
+                            cmd.append(f"--http-referrer={headers['Referer']}")
                 else:
                     cmd = [player_bin, "--force-window=yes", url]
-                    for sub in subtitles:
+                    # Limit to top 5 subtitles to prevent MPV from hanging on HTTP startup
+                    for sub in subtitles[:5]:
                         cmd.append(f"--sub-file={sub}")
+                    if isinstance(headers, dict) and headers:
+                        header_strs = [f"{k}: {v}" for k, v in headers.items()]
+                        cmd.append(f"--http-header-fields={','.join(header_strs)}")
 
                 log(f"Running cmd: {cmd}")
 
@@ -119,6 +135,7 @@ def main():
                     "stdin": subprocess.DEVNULL,
                     "stdout": subprocess.DEVNULL,
                     "stderr": subprocess.DEVNULL,
+                    "env": env,
                 }
                 if sys.platform != "win32":
                     kwargs["start_new_session"] = True

@@ -91,7 +91,7 @@ function connectNativeHelper() {
   }
 }
 
-async function tryLaunchPlayer(streamUrl, player = "mpv", subtitles = []) {
+async function tryLaunchPlayer(streamUrl, player = "mpv", subtitles = [], headers = null) {
   const config = await getConfig();
   const customPath = player === "vlc" ? config.vlc_path : config.mpv_path;
 
@@ -115,7 +115,7 @@ async function tryLaunchPlayer(streamUrl, player = "mpv", subtitles = []) {
         }
       });
 
-      port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl, subtitles });
+      port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl, subtitles, headers });
     } catch (e) {
       resolve(false);
     }
@@ -261,7 +261,7 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
     throw new Error("TorBox API Key is missing. Please set it in the extension settings.");
   }
 
-  const { hash, file_idx, is_cached, season, episode, title, page_title } = data;
+  const { hash, file_idx, is_cached, season, episode, title, page_title, imdb_id, media_type } = data;
   const magnet = `magnet:?xt=urn:btih:${hash}`;
 
   sendProgress("Adding torrent to TorBox...");
@@ -311,26 +311,58 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
       files: torrent.files,
     };
   }
+  // Extract bundled torrent subtitles (.srt, .vtt, .ass) filtered by user's preferred languages
+  const prefLangsStr = config.subtitleLangs || "en, browser";
+  const prefLangs = typeof parsePreferredLanguages === "function"
+    ? parsePreferredLanguages(prefLangsStr, typeof navigator !== "undefined" ? navigator.language : "en")
+    : ["en"];
+
+  const bundledSubs = typeof extractBundledSubtitles === "function"
+    ? extractBundledSubtitles(config.apiKey, torrentId, torrent.files, prefLangs)
+    : [];
+
+  let externalSubs = [];
+  if (imdb_id && typeof fetchSubtitles === "function") {
+    try {
+      externalSubs = await fetchSubtitles(imdb_id, season, episode, media_type, prefLangs);
+    } catch (e) {}
+  }
+
+  // Combine top 3 preferred subtitles for MPV / VLC launcher to keep startup instant
+  const allFilteredSubs = [...bundledSubs, ...externalSubs];
+  const subUrls = allFilteredSubs.slice(0, 3).map(s => s.url);
+
+  await storage.set({
+    player_bundled_subtitles: bundledSubs,
+    last_stream_metadata: {
+      imdb_id: imdb_id || "",
+      media_type: media_type || "movie",
+      season: season || 1,
+      episode: episode || 1,
+      torrent_id: torrentId
+    }
+  });
+
   const playableInBrowser = isBrowserPlayable(selectedFile.name);
 
   let launchMethod = "browser"; // default
 
   if (config.playerPref === "vlc") {
-    const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc");
+    const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc", subUrls);
     launchMethod = vlcSuccess ? "vlc" : "url_only";
   } else if (config.playerPref === "mpv") {
-    const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv");
+    const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv", subUrls);
     launchMethod = mpvSuccess ? "mpv" : "url_only";
   } else if (config.playerPref === "browser") {
     launchMethod = "browser";
   } else {
     // Auto mode: try mpv for non-browser playable formats or try native helper first
     if (!playableInBrowser) {
-      const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv");
+      const mpvSuccess = await tryLaunchPlayer(streamUrl, "mpv", subUrls);
       if (mpvSuccess) {
         launchMethod = "mpv";
       } else {
-        const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc");
+        const vlcSuccess = await tryLaunchPlayer(streamUrl, "vlc", subUrls);
         launchMethod = vlcSuccess ? "vlc" : "browser";
       }
     } else {
@@ -340,10 +372,23 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
 
   if (launchMethod === "browser") {
     // Open in internal player tab
-    const playerUrl = browser.runtime.getURL("player/player.html") +
+    const imdbIdParam = imdb_id || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].imdbId : "");
+    const mediaTypeParam = media_type || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].mediaType : "movie");
+    const seasonParam = season || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].season : 1);
+    const episodeParam = episode || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].episode : 1);
+
+    let playerUrl = browser.runtime.getURL("player/player.html") +
       `?url=${encodeURIComponent(streamUrl)}` +
       `&title=${encodeURIComponent(selectedFile.name)}` +
       `&torrent_id=${torrentId}`;
+
+    if (imdbIdParam) {
+      playerUrl += `&imdb_id=${encodeURIComponent(imdbIdParam)}` +
+        `&media_type=${encodeURIComponent(mediaTypeParam)}` +
+        `&season=${seasonParam}` +
+        `&episode=${episodeParam}`;
+    }
+
     await browser.tabs.create({ url: playerUrl });
   }
 
@@ -369,103 +414,77 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       break;
 
     case "GET_TAB_INFO":
-      browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
-        sendResponse(tabs[0] ? (tabInfo[tabs[0].id] || null) : null);
+      return browser.tabs.query({ active: true, currentWindow: true }).then(tabs => {
+        return tabs[0] ? (tabInfo[tabs[0].id] || null) : null;
       });
-      return true;
 
     case "FETCH_TORRENTIO":
-      fetchTorrentio(msg.imdbId, msg.season, msg.episode)
-        .then(streams => sendResponse({ type: "TORRENTIO_RESULT", streams }))
-        .catch(e => sendResponse({ type: "TORRENTIO_ERROR", message: e.message }));
-      return true;
+      return fetchTorrentio(msg.imdbId, msg.season, msg.episode)
+        .then(streams => ({ type: "TORRENTIO_RESULT", streams }))
+        .catch(e => ({ type: "TORRENTIO_ERROR", message: e.message }));
 
     case "CHECK_CACHE":
-      (async () => {
+      return (async () => {
         try {
           const config = await getConfig();
           if (!config.apiKey) {
-            sendResponse({ type: "CACHE_ERROR", message: "TorBox API key missing. Please set it in options." });
-            return;
+            return { type: "CACHE_ERROR", message: "TorBox API key missing. Please set it in options." };
           }
           const cacheMap = await torboxCheckCached(config.apiKey, msg.hashes);
           const updatedStreams = msg.streams.map(s => ({
             ...s,
             cached: !!cacheMap[s.info_hash],
           }));
-          sendResponse({ type: "CACHE_RESULT", streams: updatedStreams });
+          return { type: "CACHE_RESULT", streams: updatedStreams };
         } catch (e) {
-          sendResponse({ type: "CACHE_ERROR", message: e.message });
+          return { type: "CACHE_ERROR", message: e.message };
         }
       })();
-      return true;
 
     case "START_STREAM":
-      (async () => {
-        try {
-          const res = await handleStreamRequest(msg.data, senderTabId, (progressMsg) => {
-            if (senderTabId) {
-              browser.tabs.sendMessage(senderTabId, {
-                type: "STREAM_PROGRESS",
-                message: progressMsg,
-              }).catch(() => {});
-            }
-          });
-          sendResponse({ type: "STREAM_RESULT", data: res });
-        } catch (e) {
-          sendResponse({ type: "STREAM_ERROR", message: e.message });
+      return handleStreamRequest(msg.data, sender.tab?.id, (progressMsg) => {
+        if (sender.tab?.id) {
+          browser.tabs.sendMessage(sender.tab.id, {
+            type: "STREAM_PROGRESS",
+            message: progressMsg,
+          }).catch(() => {});
         }
-      })();
-      return true;
+      }).then(res => ({ type: "STREAM_RESULT", data: res }))
+        .catch(e => ({ type: "STREAM_ERROR", message: e.message }));
 
     case "PICK_FILE":
-      (async () => {
+      return (async () => {
         try {
           const config = await getConfig();
           const streamUrl = torboxGetDownloadUrl(config.apiKey, msg.torrentId, msg.fileId);
-          sendResponse({ type: "PICK_FILE_RESULT", url: streamUrl });
+          return { type: "PICK_FILE_RESULT", url: streamUrl };
         } catch (e) {
-          sendResponse({ type: "PICK_FILE_ERROR", message: e.message });
+          return { type: "PICK_FILE_ERROR", message: e.message };
         }
       })();
-      return true;
 
     case "DELETE_TORRENT":
-      (async () => {
+      return (async () => {
         try {
           const config = await getConfig();
           const success = await torboxDeleteTorrent(config.apiKey, msg.torrentId);
-          sendResponse({ type: "DELETE_RESULT", success });
+          return { type: "DELETE_RESULT", success };
         } catch (e) {
-          sendResponse({ type: "DELETE_ERROR", message: e.message });
+          return { type: "DELETE_ERROR", message: e.message };
         }
       })();
-      return true;
 
     case "TRY_MPV":
-      tryLaunchPlayer(msg.url, "mpv", msg.subtitles || []).then(success => {
-        sendResponse({ success });
-      });
-      return true;
+      return tryLaunchPlayer(msg.url, "mpv", msg.subtitles || []).then(success => ({ success }));
 
     case "TRY_PLAYER":
-      tryLaunchPlayer(msg.url, msg.player || "mpv", msg.subtitles || []).then(success => {
-        sendResponse({ success });
-      });
-      return true;
+      return tryLaunchPlayer(msg.url, msg.player || "mpv", msg.subtitles || []).then(success => ({ success }));
 
     case "FETCH_SUBTITLE_TEXT":
-      (async () => {
-        try {
-          const resp = await fetch(msg.url);
-          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-          const text = await resp.text();
-          sendResponse({ type: "SUBTITLE_TEXT_RESULT", success: true, text });
-        } catch (e) {
-          sendResponse({ type: "SUBTITLE_TEXT_RESULT", success: false, error: e.message });
-        }
-      })();
-      return true;
+      return fetch(msg.url)
+        .then(resp => { if (!resp.ok) throw new Error(`HTTP ${resp.status}`); return resp.text(); })
+        .then(text => ({ type: "SUBTITLE_TEXT_RESULT", success: true, text }))
+        .catch(e => ({ type: "SUBTITLE_TEXT_RESULT", success: false, error: e.message }));
 
     case "OPEN_OPTIONS":
       browser.runtime.openOptionsPage();

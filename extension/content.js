@@ -747,6 +747,10 @@
       `;
     }
 
+    if (!Array.isArray(currentStreams)) {
+      currentStreams = [];
+    }
+
     const qualities = ["all", ...new Set(currentStreams.map(s => s.quality).filter(Boolean))];
     const cachedCount = currentStreams.filter(s => s.cached).length;
 
@@ -1059,7 +1063,7 @@
           return;
         }
 
-        currentStreams = cacheResp.streams;
+        currentStreams = (cacheResp && Array.isArray(cacheResp.streams)) ? cacheResp.streams : [];
         await loadPlayerPref();
         renderStreams();
       }
@@ -1075,6 +1079,8 @@
       hash: stream.info_hash,
       file_idx: stream.file_idx,
       is_cached: !!stream.cached,
+      imdb_id: imdbInfo ? imdbInfo.imdbId : null,
+      media_type: imdbInfo ? (imdbInfo.mediaType || "movie") : "movie",
     };
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
