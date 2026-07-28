@@ -878,6 +878,7 @@
           <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
         </div>
         <div style="text-align:center;">
+          <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
           <button class="torbox-btn torbox-btn-primary" id="torbox-try-mpv-btn">Open in MPV</button>
           <button class="torbox-btn torbox-btn-primary" id="torbox-try-vlc-btn">Open in VLC</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
@@ -916,6 +917,7 @@
           <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
         </div>
         <div style="text-align:center;">
+          <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
           <button class="torbox-btn torbox-btn-primary" id="torbox-try-browser-btn">Open in Browser Tab</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
@@ -937,6 +939,7 @@
         </div>
         <textarea readonly style="width:100%;height:60px;background:#111;color:#aaa;border:1px solid #444;border-radius:6px;padding:8px;font-size:11px;resize:none;">${escapeHtml(data.url)}</textarea>
         <div style="text-align:center;margin-top:8px;">
+          <button class="torbox-btn torbox-btn-secondary" id="torbox-back-btn">← Back to Streams</button>
           <button class="torbox-btn torbox-btn-primary" id="torbox-copy-btn">Copy URL</button>
           <button class="torbox-btn torbox-btn-danger" id="torbox-del-btn">Delete from TorBox</button>
           <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn">Done</button>
@@ -945,6 +948,13 @@
       document.getElementById("torbox-copy-btn").addEventListener("click", () => {
         navigator.clipboard.writeText(data.url);
         document.getElementById("torbox-copy-btn").textContent = "Copied!";
+      });
+    }
+
+    const backBtn = document.getElementById("torbox-back-btn");
+    if (backBtn) {
+      backBtn.addEventListener("click", () => {
+        renderStreams();
       });
     }
 
