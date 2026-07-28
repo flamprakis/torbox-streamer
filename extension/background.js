@@ -14,20 +14,59 @@ let isNativeConnected = false;
 const tabInfo = {};
 let torrentioBaseUrl = "https://torrentio.strem.fun";
 
+const storage = {
+  get: (keys) => {
+    return new Promise((resolve) => {
+      try {
+        if (typeof globalThis.browser !== "undefined" && globalThis.browser.storage) {
+          globalThis.browser.storage.local.get(keys).then(resolve).catch(() => resolve({}));
+        } else if (typeof globalThis.chrome !== "undefined" && globalThis.chrome.storage) {
+          globalThis.chrome.storage.local.get(keys, (res) => resolve(res || {}));
+        } else {
+          resolve({});
+        }
+      } catch (e) {
+        resolve({});
+      }
+    });
+  },
+  set: (items) => {
+    return new Promise((resolve) => {
+      try {
+        if (typeof globalThis.browser !== "undefined" && globalThis.browser.storage) {
+          globalThis.browser.storage.local.set(items).then(resolve).catch(() => resolve());
+        } else if (typeof globalThis.chrome !== "undefined" && globalThis.chrome.storage) {
+          globalThis.chrome.storage.local.set(items, () => resolve());
+        } else {
+          resolve();
+        }
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+};
+
 // ─── Settings & Storage ────────────────────────────────────────────────────
 
 async function getConfig() {
-  const stored = await browser.storage.local.get([
+  const stored = await storage.get([
     "torbox_api_key",
     "player_preference",
     "torrentio_base_url",
     "max_results",
+    "default_quality_filter",
+    "enabled_qualities",
+    "max_per_quality"
   ]);
   return {
     apiKey: stored.torbox_api_key || "",
-    playerPref: stored.player_preference || "auto", // "auto", "browser", "mpv"
+    playerPref: stored.player_preference || "auto",
     torrentioBaseUrl: stored.torrentio_base_url || "https://torrentio.strem.fun",
     maxResults: stored.max_results || 20,
+    default_quality_filter: stored.default_quality_filter || "all",
+    enabled_qualities: stored.enabled_qualities || ["4K", "1080p", "720p", "480p"],
+    max_per_quality: stored.max_per_quality || 5
   };
 }
 

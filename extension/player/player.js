@@ -94,10 +94,28 @@ document.addEventListener("DOMContentLoaded", async () => {
     titleEl.textContent = `${streamTitle} (Format/Codec not natively supported by browser. Try opening in MPV or VLC.)`;
   });
 
+  const storage = {
+    get: (keys) => {
+      return new Promise((resolve) => {
+        try {
+          if (typeof globalThis.browser !== "undefined" && globalThis.browser.storage) {
+            globalThis.browser.storage.local.get(keys).then(resolve).catch(() => resolve({}));
+          } else if (typeof globalThis.chrome !== "undefined" && globalThis.chrome.storage) {
+            globalThis.chrome.storage.local.get(keys, (res) => resolve(res || {}));
+          } else {
+            resolve({});
+          }
+        } catch (e) {
+          resolve({});
+        }
+      });
+    }
+  };
+
   // Load Subtitles
   if (imdbId) {
     try {
-      const config = await browser.storage.local.get(["subtitle_languages"]);
+      const config = await storage.get(["subtitle_languages"]);
       const prefLangsStr = config.subtitle_languages || "en, browser";
 
       const prefLangs = parsePreferredLanguages(prefLangsStr, navigator.language);

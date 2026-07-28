@@ -1,4 +1,35 @@
-var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
+const storage = {
+  get: (keys) => {
+    return new Promise((resolve) => {
+      try {
+        if (typeof globalThis.browser !== "undefined" && globalThis.browser.storage) {
+          globalThis.browser.storage.local.get(keys).then(resolve).catch(() => resolve({}));
+        } else if (typeof globalThis.chrome !== "undefined" && globalThis.chrome.storage) {
+          globalThis.chrome.storage.local.get(keys, (res) => resolve(res || {}));
+        } else {
+          resolve({});
+        }
+      } catch (e) {
+        resolve({});
+      }
+    });
+  },
+  set: (items) => {
+    return new Promise((resolve) => {
+      try {
+        if (typeof globalThis.browser !== "undefined" && globalThis.browser.storage) {
+          globalThis.browser.storage.local.set(items).then(resolve).catch(() => resolve());
+        } else if (typeof globalThis.chrome !== "undefined" && globalThis.chrome.storage) {
+          globalThis.chrome.storage.local.set(items, () => resolve());
+        } else {
+          resolve();
+        }
+      } catch (e) {
+        resolve();
+      }
+    });
+  }
+};
 
 document.addEventListener("DOMContentLoaded", async () => {
   const apiKeyEl = document.getElementById("api-key");
@@ -12,6 +43,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const mpvPathEl = document.getElementById("mpv-path");
   const vlcPathEl = document.getElementById("vlc-path");
 
+  const qualityPrefEl = document.getElementById("quality-pref");
   const qual4kEl = document.getElementById("qual-4k");
   const qual1080pEl = document.getElementById("qual-1080p");
   const qual720pEl = document.getElementById("qual-720p");
@@ -21,7 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const subtitleLangsEl = document.getElementById("subtitle-langs");
 
   // Load existing options
-  const config = await browser.storage.local.get([
+  const config = await storage.get([
     "torbox_api_key",
     "player_preference",
     "default_quality_filter",
@@ -79,7 +111,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const maxPerQual = parseInt(maxPerQualEl.value) || 5;
 
-    await browser.storage.local.set({
+    await storage.set({
       torbox_api_key: key,
       player_preference: pref,
       default_quality_filter: qualPref,
