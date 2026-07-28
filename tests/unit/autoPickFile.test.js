@@ -159,7 +159,20 @@ describe('File Selection Algorithm (autoPickFile)', () => {
     expect(picked.name).toBe('Show.S01E05.mkv');
   });
 
-  it('should fall back to largest video file if no season/episode pattern is specified (movie packs)', () => {
+  it('should match movie title keywords in multi-file movie collection packs (e.g. IMDb Top 250)', () => {
+    const files = [
+      { id: 1, name: 'IMDB Top 250/001 The Shawshank Redemption (1994)/The.Shawshank.Redemption.1994.REMASTERED.1080p.BluRay.x265-RARBG.mp4', size: 2_220_000_000 },
+      { id: 2, name: 'IMDB Top 250/002 The Godfather (1972)/The.Godfather.1972.1080p.BluRay.mp4', size: 3_500_000_000 },
+      { id: 3, name: 'IMDB Top 250/003 The Dark Knight (2008)/The.Dark.Knight.2008.1080p.BluRay.mp4', size: 4_200_000_000 },
+    ];
+
+    const picked = autoPickFile(files, null, null, null, "The Shawshank Redemption (1994)");
+    expect(picked).toBeDefined();
+    expect(picked.id).toBe(1);
+    expect(picked.name).toContain("Shawshank.Redemption");
+  });
+
+  it('should fall back to largest video file if no season/episode or title pattern matches', () => {
     const files = [
       { id: 1, name: 'Sample.mkv', size: 50_000_000 },
       { id: 2, name: 'Movie.2024.1080p.mkv', size: 4_500_000_000 },

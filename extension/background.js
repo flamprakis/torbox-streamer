@@ -261,7 +261,7 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
     throw new Error("TorBox API Key is missing. Please set it in the extension settings.");
   }
 
-  const { hash, file_idx, is_cached, season, episode } = data;
+  const { hash, file_idx, is_cached, season, episode, title, page_title } = data;
   const magnet = `magnet:?xt=urn:btih:${hash}`;
 
   sendProgress("Adding torrent to TorBox...");
@@ -290,10 +290,11 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
   }
 
   // Pick file using smart file selection (filters out .nfo, .txt, samples)
-  const selectedFile = autoPickFile(torrent.files, file_idx, season, episode);
+  const searchTitle = title || page_title || "";
+  const selectedFile = autoPickFile(torrent.files, file_idx, season, episode, searchTitle);
 
-  if (!selectedFile) {
-    // Return file list for manual picking if auto-pick returned nothing
+  if (!selectedFile || selectedFile.id == null || selectedFile.id === "" || isNaN(selectedFile.id)) {
+    // Return file list for manual picking if auto-pick returned nothing or an invalid ID
     return {
       action: "pick_file",
       torrent_id: torrentId,
@@ -303,6 +304,13 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
 
   // Get stream URL
   const streamUrl = torboxGetDownloadUrl(config.apiKey, torrentId, selectedFile.id);
+  if (!streamUrl) {
+    return {
+      action: "pick_file",
+      torrent_id: torrentId,
+      files: torrent.files,
+    };
+  }
   const playableInBrowser = isBrowserPlayable(selectedFile.name);
 
   let launchMethod = "browser"; // default

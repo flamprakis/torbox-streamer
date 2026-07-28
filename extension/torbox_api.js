@@ -164,13 +164,23 @@ async function torboxCreateTorrent(apiKey, magnet) {
  * Parse raw torrent data from the API into a clean object.
  */
 function parseTorrent(raw) {
-  const files = (raw.files || []).map(f => ({
-    id: f.id || 0,
-    name: f.name || "",
-    short_name: f.short_name || "",
-    size: f.size || 0,
-    size_human: humanSize(f.size || 0),
-  }));
+  const files = (raw.files || []).map((f, idx) => {
+    let fileId = idx + 1; // 1-indexed fallback
+    if (typeof f.id === "number") {
+      fileId = f.id;
+    } else if (typeof f.file_id === "number") {
+      fileId = f.file_id;
+    } else if (typeof f.id === "string" && !isNaN(parseInt(f.id))) {
+      fileId = parseInt(f.id);
+    }
+    return {
+      id: fileId,
+      name: f.name || "",
+      short_name: f.short_name || "",
+      size: f.size || 0,
+      size_human: humanSize(f.size || 0),
+    };
+  });
 
   return {
     id: raw.id || 0,
@@ -237,6 +247,10 @@ async function torboxWaitForReady(apiKey, torrentId, { timeout = 120, pollInterv
  * Uses redirect=true so the URL is stable (doesn't expire).
  */
 function torboxGetDownloadUrl(apiKey, torrentId, fileId) {
+  if (fileId == null || fileId === "" || isNaN(fileId)) {
+    console.error("[TorBox Streamer] Invalid fileId provided to torboxGetDownloadUrl:", fileId);
+    return null;
+  }
   return (
     `${TORBOX_API}/torrents/requestdl` +
     `?token=${encodeURIComponent(apiKey)}` +
@@ -299,17 +313,19 @@ function isBrowserPlayable(filename) {
  * Intelligently pick the right file from a torrent.
  * Strategy:
  *   1. If fileIdx points to a valid video file (>20MB, video ext), use it
- *   2. For series: match episode pattern in filename among video files
- *   3. Pick the largest video file (by size)
- *   4. If no video extension match, pick largest non-skip file
- *   5. Last resort: largest file overall
+ *   2. Match keywords from searchTitle against filenames inside torrent
+ *   3. For series: match episode pattern in filename among video files
+ *   4. Pick the largest video file (by size)
+ *   5. If no video extension match, pick largest non-skip file
+ *   6. Last resort: largest file overall
  */
-function autoPickFile(files, fileIdx, season, episode) {
+function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
   if (!files || files.length === 0) return null;
 
-  // 1. If fileIdx is provided, validate that it points to an actual video file (not .nfo / .txt)
+  // 1. If fileIdx is provided, validate that it points to an actual video file (>20MB, video ext)
   if (fileIdx != null) {
-    const candidate = files.find(f => f.id === fileIdx || f.id === fileIdx + 1);
+    const idxNum = parseInt(fileIdx);
+    const candidate = files.find(f => f.id === idxNum || f.id === idxNum + 1 || files.indexOf(f) === idxNum);
     if (candidate && isVideoFile(candidate.name) && candidate.size > 20_000_000) {
       return candidate;
     }
@@ -322,7 +338,36 @@ function autoPickFile(files, fileIdx, season, episode) {
     return files[0];
   }
 
-  // 2. For series: try episode pattern matching among video files
+  // 2. Title-based keyword matching (crucial for movie/series packs like IMDb Top 250)
+  if (searchTitle && typeof searchTitle === "string") {
+    const cleanTitle = searchTitle.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+    const stopWords = new Set(["1080p", "2160p", "720p", "480p", "bluray", "webrip", "web-dl", "remastered", "esubs", "x264", "x265", "hevc", "rarbg", "edition", "imdb", "top", "250"]);
+    const keywords = cleanTitle.split(/\s+/).filter(k => k.length >= 3 && !stopWords.has(k));
+
+    if (keywords.length > 0) {
+      const videoFiles = files.filter(f => isVideoFile(f.name) && f.size > 20_000_000);
+      let bestMatch = null;
+      let maxHits = 0;
+
+      for (const f of videoFiles) {
+        const lowerName = f.name.toLowerCase();
+        let hits = 0;
+        for (const kw of keywords) {
+          if (lowerName.includes(kw)) hits++;
+        }
+        if (hits > maxHits) {
+          maxHits = hits;
+          bestMatch = f;
+        }
+      }
+
+      if (bestMatch && maxHits >= Math.min(2, keywords.length)) {
+        return bestMatch;
+      }
+    }
+  }
+
+  // 3. For series: try episode pattern matching among video files
   if (season && episode) {
     const s = parseInt(season);
     const e = parseInt(episode);
@@ -378,19 +423,19 @@ function autoPickFile(files, fileIdx, season, episode) {
     }
   }
 
-  // 3. Pick the largest video file
+  // 4. Pick the largest video file
   const videoFiles = files.filter(f => isVideoFile(f.name) && f.size > 10_000_000);
   if (videoFiles.length > 0) {
     return videoFiles.reduce((a, b) => a.size > b.size ? a : b);
   }
 
-  // 4. Filter out known non-video/skip extensions, pick largest
+  // 5. Filter out known non-video/skip extensions, pick largest
   const nonSkip = files.filter(f => !SKIP_EXTS.has(getFileExt(f.name)));
   if (nonSkip.length > 0) {
     return nonSkip.reduce((a, b) => a.size > b.size ? a : b);
   }
 
-  // 5. Last resort: largest file overall
+  // 6. Last resort: largest file overall
   return files.reduce((a, b) => a.size > b.size ? a : b);
 }
 
