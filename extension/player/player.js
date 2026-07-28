@@ -69,6 +69,19 @@ function shiftVttTime(timeStr, delaySec) {
   return `${h}:${m}:${s}.${millis}`;
 }
 
+function formatTime(seconds) {
+  if (isNaN(seconds) || seconds < 0) return "0:00";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const sStr = String(s).padStart(2, "0");
+  if (h > 0) {
+    const mStr = String(m).padStart(2, "0");
+    return `${h}:${mStr}:${sStr}`;
+  }
+  return `${m}:${sStr}`;
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   const params = new URLSearchParams(window.location.search);
   const streamUrl = params.get("url");
@@ -80,6 +93,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const season = isSeries ? (parseInt(params.get("season")) || 1) : null;
   const episode = isSeries ? (parseInt(params.get("episode")) || 1) : null;
 
+  const container = document.getElementById("player-container");
   const video = document.getElementById("video-player");
   const titleEl = document.getElementById("title");
   const btnMpv = document.getElementById("btn-mpv");
@@ -90,11 +104,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   const subSelect = document.getElementById("sub-select");
   const btnSubMinus = document.getElementById("btn-sub-minus");
   const btnSubPlus = document.getElementById("btn-sub-plus");
+  const btnReloadSubs = document.getElementById("btn-reload-subs");
+
+  // Modern Control Elements
+  const topOverlay = document.getElementById("top-overlay");
+  const bottomOverlay = document.getElementById("bottom-overlay");
+  const btnPlayPause = document.getElementById("btn-play-pause");
+  const iconPlay = document.getElementById("icon-play");
+  const iconPause = document.getElementById("icon-pause");
+
+  const btnVolume = document.getElementById("btn-volume");
+  const iconVolHigh = document.getElementById("icon-vol-high");
+  const iconVolMute = document.getElementById("icon-vol-mute");
+  const volumeSlider = document.getElementById("volume-slider");
+
+  const timeCurrent = document.getElementById("time-current");
+  const timeDuration = document.getElementById("time-duration");
+
+  const seekbarWrapper = document.getElementById("seekbar-wrapper");
+  const progressBar = document.getElementById("progress-bar");
+  const bufferBar = document.getElementById("buffer-bar");
+  const timeTooltip = document.getElementById("time-tooltip");
+
+  const btnFullscreen = document.getElementById("btn-fullscreen");
+  const iconFsEnter = document.getElementById("icon-fs-enter");
+  const iconFsExit = document.getElementById("icon-fs-exit");
+
+  const centerFlash = document.getElementById("center-play-flash");
+  const flashSvgPlay = document.getElementById("flash-svg-play");
+  const flashSvgPause = document.getElementById("flash-svg-pause");
 
   let currentSubtitles = [];
   let rawSubTexts = {};
   let currentDelay = 0;
   let activeTrackBlobUrl = null;
+  let idleTimer = null;
+  let isSeeking = false;
 
   titleEl.textContent = streamTitle;
 
@@ -108,6 +153,221 @@ document.addEventListener("DOMContentLoaded", async () => {
     titleEl.textContent = `${streamTitle} (Format/Codec not natively supported by browser. Try opening in MPV or VLC.)`;
   });
 
+  // Controls UI Logic & Play/Pause
+  function togglePlayPause() {
+    if (video.paused) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }
+
+  function updatePlayIcons() {
+    if (video.paused) {
+      if (iconPlay) iconPlay.classList.remove("hidden");
+      if (iconPause) iconPause.classList.add("hidden");
+      showOverlays();
+    } else {
+      if (iconPlay) iconPlay.classList.add("hidden");
+      if (iconPause) iconPause.classList.remove("hidden");
+      resetIdleTimer();
+    }
+  }
+
+  function flashPlayState() {
+    if (!centerFlash) return;
+    if (video.paused) {
+      if (flashSvgPlay) flashSvgPlay.classList.add("hidden");
+      if (flashSvgPause) flashSvgPause.classList.remove("hidden");
+    } else {
+      if (flashSvgPlay) flashSvgPlay.classList.remove("hidden");
+      if (flashSvgPause) flashSvgPause.classList.add("hidden");
+    }
+    centerFlash.classList.remove("hidden");
+    setTimeout(() => {
+      centerFlash.classList.add("hidden");
+    }, 400);
+  }
+
+  if (btnPlayPause) {
+    btnPlayPause.addEventListener("click", () => {
+      togglePlayPause();
+      flashPlayState();
+    });
+  }
+
+  video.addEventListener("play", updatePlayIcons);
+  video.addEventListener("pause", updatePlayIcons);
+
+  video.addEventListener("click", () => {
+    togglePlayPause();
+    flashPlayState();
+  });
+
+  video.addEventListener("dblclick", () => {
+    toggleFullscreen();
+  });
+
+  // Volume & Mute Controls
+  if (volumeSlider) {
+    volumeSlider.addEventListener("input", (e) => {
+      video.volume = parseFloat(e.target.value);
+      video.muted = video.volume === 0;
+      updateVolumeIcons();
+    });
+  }
+
+  if (btnVolume) {
+    btnVolume.addEventListener("click", () => {
+      video.muted = !video.muted;
+      updateVolumeIcons();
+    });
+  }
+
+  function updateVolumeIcons() {
+    if (!iconVolHigh || !iconVolMute) return;
+    if (video.muted || video.volume === 0) {
+      iconVolHigh.classList.add("hidden");
+      iconVolMute.classList.remove("hidden");
+      if (volumeSlider) volumeSlider.value = 0;
+    } else {
+      iconVolHigh.classList.remove("hidden");
+      iconVolMute.classList.add("hidden");
+      if (volumeSlider) volumeSlider.value = video.volume;
+    }
+  }
+
+  // Seekbar & Time Progress
+  video.addEventListener("loadedmetadata", () => {
+    if (timeDuration) timeDuration.textContent = formatTime(video.duration);
+  });
+
+  video.addEventListener("timeupdate", () => {
+    if (!isSeeking && timeCurrent && video.duration) {
+      timeCurrent.textContent = formatTime(video.currentTime);
+      const pct = (video.currentTime / video.duration) * 100;
+      if (progressBar) progressBar.style.width = `${pct}%`;
+    }
+  });
+
+  video.addEventListener("progress", () => {
+    if (video.buffered.length > 0 && video.duration) {
+      const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+      const pct = (bufferedEnd / video.duration) * 100;
+      if (bufferBar) bufferBar.style.width = `${pct}%`;
+    }
+  });
+
+  if (seekbarWrapper) {
+    const handleSeek = (e) => {
+      const rect = seekbarWrapper.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      if (video.duration) {
+        video.currentTime = pct * video.duration;
+        if (progressBar) progressBar.style.width = `${pct * 100}%`;
+        if (timeCurrent) timeCurrent.textContent = formatTime(video.currentTime);
+      }
+    };
+
+    seekbarWrapper.addEventListener("mousedown", (e) => {
+      isSeeking = true;
+      handleSeek(e);
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (isSeeking) handleSeek(e);
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (isSeeking) isSeeking = false;
+    });
+
+    seekbarWrapper.addEventListener("mousemove", (e) => {
+      const rect = seekbarWrapper.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      if (video.duration && timeTooltip) {
+        const hoverTime = pct * video.duration;
+        timeTooltip.textContent = formatTime(hoverTime);
+        timeTooltip.style.left = `${pct * 100}%`;
+        timeTooltip.classList.remove("hidden");
+      }
+    });
+
+    seekbarWrapper.addEventListener("mouseleave", () => {
+      if (timeTooltip) timeTooltip.classList.add("hidden");
+    });
+  }
+
+  // Fullscreen Controls
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      container.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  }
+
+  if (btnFullscreen) {
+    btnFullscreen.addEventListener("click", toggleFullscreen);
+  }
+
+  document.addEventListener("fullscreenchange", () => {
+    if (!iconFsEnter || !iconFsExit) return;
+    if (document.fullscreenElement) {
+      iconFsEnter.classList.add("hidden");
+      iconFsExit.classList.remove("hidden");
+    } else {
+      iconFsEnter.classList.remove("hidden");
+      iconFsExit.classList.add("hidden");
+    }
+  });
+
+  // Auto-Hiding Controls Overlay
+  function showOverlays() {
+    if (topOverlay) topOverlay.classList.remove("idle-hide");
+    if (bottomOverlay) bottomOverlay.classList.remove("idle-hide");
+    container.style.cursor = "default";
+  }
+
+  function resetIdleTimer() {
+    showOverlays();
+    if (idleTimer) clearTimeout(idleTimer);
+    if (!video.paused) {
+      idleTimer = setTimeout(() => {
+        if (topOverlay) topOverlay.classList.add("idle-hide");
+        if (bottomOverlay) bottomOverlay.classList.add("idle-hide");
+        container.style.cursor = "none";
+      }, 3000);
+    }
+  }
+
+  container.addEventListener("mousemove", resetIdleTimer);
+  container.addEventListener("click", resetIdleTimer);
+
+  // Keyboard Shortcuts
+  window.addEventListener("keydown", (e) => {
+    if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+    if (e.code === "Space" || e.code === "KeyK") {
+      e.preventDefault();
+      togglePlayPause();
+      flashPlayState();
+    } else if (e.code === "KeyF") {
+      e.preventDefault();
+      toggleFullscreen();
+    } else if (e.code === "KeyM") {
+      e.preventDefault();
+      video.muted = !video.muted;
+      updateVolumeIcons();
+    } else if (e.code === "ArrowLeft") {
+      e.preventDefault();
+      video.currentTime = Math.max(0, video.currentTime - 5);
+    } else if (e.code === "ArrowRight") {
+      e.preventDefault();
+      video.currentTime = Math.min(video.duration || 0, video.currentTime + 5);
+    }
+  });
+
+  // Subtitles & Storage
   const storage = {
     get: (keys) => {
       return new Promise((resolve) => {
@@ -125,8 +385,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     }
   };
-
-  const btnReloadSubs = document.getElementById("btn-reload-subs");
 
   async function initSubtitles() {
     if (subSelect) {
@@ -150,7 +408,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         ? parsePreferredLanguages(prefLangsStr, navigator.language)
         : ["en"];
 
-      // Failsafe: Fetch torrent file list directly from TorBox API if storage is empty or incomplete
       if (bundled.length === 0 && effectiveTorrentId && apiKey && typeof torboxGetTorrentList === "function") {
         try {
           const torrents = await torboxGetTorrentList(apiKey, effectiveTorrentId);
@@ -175,7 +432,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           subSelect.appendChild(opt);
         });
 
-        // Auto-select and load first available track
         subSelect.value = "0";
         await loadSelectedSubtitle(0, currentDelay);
       }
@@ -209,7 +465,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (res && res.success && res.text) {
           rawSubTexts[sub.url] = res.text;
         } else {
-          // Fallback direct fetch
           const resp = await fetch(sub.url);
           rawSubTexts[sub.url] = await resp.text();
         }
@@ -240,7 +495,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     video.appendChild(track);
 
-    // Ensure textTrack mode is activated as 'showing'
     if (track.track) {
       track.track.mode = "showing";
     }
@@ -280,47 +534,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  btnCopy.addEventListener("click", () => {
-    if (streamUrl) {
-      navigator.clipboard.writeText(streamUrl);
-      btnCopy.textContent = "Copied!";
-      setTimeout(() => btnCopy.textContent = "Copy Stream URL", 2000);
-    }
-  });
+  if (btnCopy) {
+    btnCopy.addEventListener("click", () => {
+      if (streamUrl) {
+        navigator.clipboard.writeText(streamUrl);
+        btnCopy.textContent = "Copied!";
+        setTimeout(() => btnCopy.textContent = "📋 Copy", 2000);
+      }
+    });
+  }
 
-  btnMpv.addEventListener("click", async () => {
-    if (!streamUrl) return;
-    btnMpv.textContent = "Launching MPV...";
-    const subUrls = currentSubtitles.map(s => s.url);
-    const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: streamUrl, subtitles: subUrls });
-    if (resp && resp.success) {
-      btnMpv.textContent = "Launched in MPV!";
-      video.pause();
-    } else {
-      btnMpv.textContent = "MPV helper not found";
-      alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
-    }
-    setTimeout(() => btnMpv.textContent = "Try in MPV", 3000);
-  });
+  if (btnMpv) {
+    btnMpv.addEventListener("click", async () => {
+      if (!streamUrl) return;
+      btnMpv.textContent = "Launching...";
+      const subUrls = currentSubtitles.map(s => s.url);
+      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: streamUrl, subtitles: subUrls });
+      if (resp && resp.success) {
+        btnMpv.textContent = "Launched!";
+        video.pause();
+      } else {
+        btnMpv.textContent = "MPV missing";
+        alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
+      }
+      setTimeout(() => btnMpv.textContent = "🚀 MPV", 3000);
+    });
+  }
 
   if (btnVlc) {
     btnVlc.addEventListener("click", async () => {
       if (!streamUrl) return;
-      btnVlc.textContent = "Launching VLC...";
+      btnVlc.textContent = "Launching...";
       const subUrls = currentSubtitles.map(s => s.url);
       const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: streamUrl, subtitles: subUrls });
       if (resp && resp.success) {
-        btnVlc.textContent = "Launched in VLC!";
+        btnVlc.textContent = "Launched!";
         video.pause();
       } else {
-        btnVlc.textContent = "VLC helper not found";
+        btnVlc.textContent = "VLC missing";
         alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
       }
-      setTimeout(() => btnVlc.textContent = "Try in VLC", 3000);
+      setTimeout(() => btnVlc.textContent = "🍊 VLC", 3000);
     });
   }
 
-  // Drag and Drop Subtitle File Support (.srt / .vtt)
   video.addEventListener("dragover", (e) => {
     e.preventDefault();
   });
@@ -366,16 +623,18 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  btnDelete.addEventListener("click", async () => {
-    if (!torrentId) return;
-    if (confirm("Are you sure you want to delete this torrent from TorBox?")) {
-      const resp = await browser.runtime.sendMessage({ type: "DELETE_TORRENT", torrentId });
-      if (resp && resp.success) {
-        alert("Torrent deleted from TorBox.");
-        window.close();
-      } else {
-        alert("Failed to delete torrent.");
+  if (btnDelete) {
+    btnDelete.addEventListener("click", async () => {
+      if (!torrentId) return;
+      if (confirm("Are you sure you want to delete this torrent from TorBox?")) {
+        const resp = await browser.runtime.sendMessage({ type: "DELETE_TORRENT", torrentId });
+        if (resp && resp.success) {
+          alert("Torrent deleted from TorBox.");
+          window.close();
+        } else {
+          alert("Failed to delete torrent.");
+        }
       }
-    }
-  });
+    });
+  }
 });
