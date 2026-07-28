@@ -17,12 +17,13 @@ TorBox Streamer is a **pure, self-contained browser extension**. No complex back
 - 🍿 **Direct IMDb & TMDB Integration** — Injects a sleek **"Play Now"** action button on movie and TV show title pages.
 - ⚡ **Instant Cache Checking** — Queries TorBox cache in parallel to find instantly streamable torrents.
 - 🎬 **In-Browser Player Tab** — Built-in dark-themed HTML5 player tab for compatible videos (`.mp4`, `.webm`).
-- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch high-bitrate streams into **MPV** or **VLC** on Linux, macOS, or Windows.
-- 🎛️ **In-Modal Player Switcher** — Toggle between `Auto`, `Browser`, `MPV`, and `VLC` right inside the stream selection modal.
-- ⚙️ **Quick Options Button** — Dedicated ⚙️ settings button inside the stream modal and popup menu for fast options access.
-- 📺 **Series Episode Matcher** — Automatically detects season/episode formats (`S01E01`, `1x01`) and picks matching files.
+- 💬 **Subtitle Engine & OpenSubtitles** — Automatic WebVTT subtitle track rendering, BOM sanitation, language selection, and OpenSubtitles API integration.
+- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch high-bitrate streams into **MPV** or **VLC** on Linux, macOS, or Windows with subtitle passthrough.
+- 🎛️ **In-Modal Player & Quality Switcher** — Toggle between `Auto`, `Browser`, `MPV`, `VLC`, and select quality buckets (`4K`, `1080p`, `720p`, `480p`) inside the stream selection modal.
+- ⚙️ **Custom Quality Mixer & Options** — Configure custom resolution distribution and preferred subtitle languages in extension settings.
+- 📦 **Smart Multi-File Torrent Selection** — Intelligently resolves specific movie titles (e.g., IMDb Top 250 collection packs) and series episodes (`S01E05`) without downloading raw `.zip` archives.
 - 🧹 **File & Account Management** — Automatic trash/`.nfo` filtering, and 1-click torrent deletion from TorBox when done.
-- 🌐 **Cross-Browser Support** — Compatible with Firefox, Waterfox, LibreWolf, Zen Browser, Google Chrome, Brave, and Edge.
+- 🌐 **Cross-Browser Support** — Promisified storage wrapper supporting Firefox, Waterfox, LibreWolf, Zen Browser, Google Chrome, Brave, and Edge.
 - 💻 **Standalone CLI Included** — Terminal enthusiasts can also stream directly using the included `cli/` tool.
 
 ---
@@ -69,7 +70,7 @@ For developers who clone the repository and want to run directly from source:
 git clone https://github.com/flamprakis/torbox-streamer.git
 cd torbox-streamer
 
-# Run automated Vitest unit suite and Playwright Firefox/Chrome E2E suite
+# Run automated Vitest unit suite (35 unit tests) and Playwright Firefox/Chrome E2E suite (4 tests)
 npm test
 
 # Build release zip assets in build/
@@ -82,7 +83,7 @@ python3 package.py
 
 | Mode | Format Support | External Player | Setup |
 | :--- | :--- | :--- | :--- |
-| **Browser Tab** 🎬 | `.mp4`, `.webm`, `.mov` | None (In-Browser) | **Zero setup required.** Works out of the box! |
+| **Browser Tab** 🎬 | `.mp4`, `.webm`, `.mov` | None (In-Browser) | **Zero setup required.** Works out of the box! Includes subtitle track picker. |
 | **MPV** 🍿 | All formats (`.mkv`, `.avi`, HDR, etc.) | MPV Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
 | **VLC** 🟧 | All formats (`.mkv`, `.avi`, multi-audio) | VLC Media Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
 | **Auto** ⚡ | Dynamic | Auto-selects | Uses Browser Tab for `.mp4` and MPV/VLC for `.mkv`. |
@@ -97,17 +98,18 @@ torbox-streamer/
 │   ├── manifest.json
 │   ├── background.js           # Background worker & stream router
 │   ├── torbox_api.js           # TorBox JS client & auto file picker
+│   ├── subtitles_api.js        # Subtitle parser & OpenSubtitles client
 │   ├── content.js              # IMDb & TMDB page injection UI
-│   ├── options/                # Extension settings UI
-│   └── player/                 # Internal tab video player
+│   ├── options/                # Promisified extension settings UI
+│   └── player/                 # Internal tab player & subtitle engine
 ├── helpers/                    # MPV / VLC Launcher Helper & Installers
 │   ├── install.sh              # Bash installer with browser auto-detection
 │   ├── install.bat             # Windows batch installer & registry setup
 │   ├── install.py              # Cross-platform Python installer & CLI flags
 │   └── native_host.py          # Native messaging bridge source
 ├── tests/                      # Automated Test Framework
-│   ├── unit/                   # Vitest unit test suite (28 tests)
-│   └── e2e/                    # Playwright Firefox E2E suite
+│   ├── unit/                   # Vitest unit test suite (35 tests)
+│   └── e2e/                    # Playwright Firefox & Chromium E2E suite
 ├── cli/                        # Standalone Terminal CLI Tool
 ├── package.py                  # Dual release zip builder (Firefox MV2 & Chrome MV3)
 └── .github/workflows/          # GitHub Actions CI matrix workflow
@@ -120,9 +122,9 @@ torbox-streamer/
 - [x] 🍿 **v2.0.0** — IMDb injection & Pure Extension architecture
 - [x] 🌐 **v2.0.1** — TMDB site integration & Playwright testing framework
 - [x] ⚡ **v2.0.2** — Multi-browser auto-detection installer & dual Firefox (MV2) / Chrome (MV3) packaging
-- [ ] 💬 **v2.1.0** — **Subtitle Integration**: Auto-fetch English + browser language subtitles, in-browser player WebVTT track selector, and `--sub-file` passing for MPV & VLC
-- [ ] 📺 **v2.2.0** — **Trakt Integration**: Trakt OAuth2 login and watch status scrobbling
-- [ ] 🔌 **v2.3.0** — **Multi-Debrid**: Support RealDebrid, AllDebrid, and Premiumize alongside TorBox
+- [x] 💬 **v2.0.3** — **Subtitles & Multi-File Engine**: In-browser WebVTT subtitle renderer, OpenSubtitles API integration, custom quality bucket mixer, and smart multi-file collection auto-picker
+- [ ] 📺 **v2.1.0** — **Trakt Integration**: Trakt OAuth2 login and watch status scrobbling
+- [ ] 🔌 **v2.2.0** — **Multi-Debrid**: Support RealDebrid, AllDebrid, and Premiumize alongside TorBox
 
 ---
 
