@@ -1,6 +1,6 @@
 {
   "name": "torbox-streamer",
-  "version": "2.0.3",
+  "version": "2.1.0",
   "description": "TorBox Streamer browser extension for Firefox & Waterfox",
   "main": "extension/background.js",
   "scripts": {
