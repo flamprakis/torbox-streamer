@@ -11,12 +11,12 @@
 ## 1. Extension Installation
 
 ### Option A: Firefox / Waterfox / LibreWolf / Zen
-1. Download `torbox-streamer-firefox-v2.0.2.zip` from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
+1. Download `torbox-streamer-firefox-v2.1.0.zip` from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
 2. Open `about:debugging#/runtime/this-firefox` in your browser.
 3. Click **"Load Temporary Add-on..."** and select `extension/manifest.json`.
 
 ### Option B: Google Chrome / Brave / Chromium / Edge
-1. Download `torbox-streamer-chrome-v2.0.2.zip` from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
+1. Download `torbox-streamer-chrome-v2.1.0.zip` from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases).
 2. Extract the zip package to a folder.
 3. Open `chrome://extensions` (or `brave://extensions`).
 4. Toggle **"Developer mode"** ON in the top-right corner.

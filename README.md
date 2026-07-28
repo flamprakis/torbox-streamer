@@ -1,6 +1,6 @@
 # TorBox Streamer 🍿
 
-[![Version](https://img.shields.io/badge/version-2.0.2-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
+[![Version](https://img.shields.io/badge/version-2.1.0-gold.svg)](https://github.com/flamprakis/torbox-streamer/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Browser Support](https://img.shields.io/badge/browsers-Firefox%20%7C%20Waterfox%20%7C%20LibreWolf%20%7C%20Zen%20%7C%20Chrome%20%7C%20Brave%20%7C%20Edge-orange.svg)](#installation)
 [![TorBox](https://img.shields.io/badge/service-TorBox.app-teal.svg)](https://torbox.app)
@@ -17,8 +17,8 @@ TorBox Streamer is a **pure, self-contained browser extension**. No complex back
 - 🍿 **Direct IMDb & TMDB Integration** — Injects a sleek **"Play Now"** action button on movie and TV show title pages.
 - ⚡ **Instant Cache Checking** — Queries TorBox cache in parallel to find instantly streamable torrents.
 - 🎬 **In-Browser Player Tab** — Built-in dark-themed HTML5 player tab for compatible videos (`.mp4`, `.webm`).
-- 💬 **Subtitle Engine & OpenSubtitles** — Automatic WebVTT subtitle track rendering, BOM sanitation, language selection, and OpenSubtitles API integration.
-- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch high-bitrate streams into **MPV** or **VLC** on Linux, macOS, or Windows with subtitle passthrough.
+- 💬 **Subtitle Engine & OpenSubtitles v3** — Automatic WebVTT subtitle track rendering, BOM sanitation, language selection (`en`, `el`, `es`, `fr`, etc.), ASS/SSA parser, 1-click **`🔄` Subtitle Reload** button, and OpenSubtitles v3 API integration.
+- 📺 **External Player Launcher (MPV & VLC)** — Seamlessly launch high-bitrate streams into **MPV** or **VLC** on Linux, macOS, or Windows with instant startup and filtered subtitle passthrough.
 - 🎛️ **In-Modal Player & Quality Switcher** — Toggle between `Auto`, `Browser`, `MPV`, `VLC`, and select quality buckets (`4K`, `1080p`, `720p`, `480p`) inside the stream selection modal.
 - ⚙️ **Custom Quality Mixer & Options** — Configure custom resolution distribution and preferred subtitle languages in extension settings.
 - 📦 **Smart Multi-File Torrent Selection** — Intelligently resolves specific movie titles (e.g., IMDb Top 250 collection packs) and series episodes (`S01E05`) without downloading raw `.zip` archives.
@@ -34,10 +34,10 @@ TorBox Streamer is a **pure, self-contained browser extension**. No complex back
 Download the appropriate release package from [GitHub Releases](https://github.com/flamprakis/torbox-streamer/releases):
 
 - **Firefox / Waterfox / LibreWolf / Zen**:
-  - Install directly from [Firefox Add-ons (AMO)](https://addons.mozilla.org) or download `torbox-streamer-firefox-v2.0.2.zip`.
+  - Install directly from [Firefox Add-ons (AMO)](https://addons.mozilla.org) or download `torbox-streamer-firefox-v2.1.0.zip`.
   - Open `about:debugging#/runtime/this-firefox` → Click **Load Temporary Add-on...** → Select `manifest.json`.
 - **Chrome / Brave / Chromium / Edge**:
-  - Download `torbox-streamer-chrome-v2.0.2.zip` and extract it.
+  - Download `torbox-streamer-chrome-v2.1.0.zip` and extract it.
   - Open `chrome://extensions` → Enable **Developer mode** → Click **Load unpacked** → Select the extracted folder.
 
 ### Step 2: Configure API Key
@@ -70,7 +70,7 @@ For developers who clone the repository and want to run directly from source:
 git clone https://github.com/flamprakis/torbox-streamer.git
 cd torbox-streamer
 
-# Run automated Vitest unit suite (35 unit tests) and Playwright Firefox/Chrome E2E suite (4 tests)
+# Run automated Vitest unit suite (42 unit tests), Playwright Firefox/Chrome E2E suite (6 tests), and Python native host E2E suite (11 tests)
 npm test
 
 # Build release zip assets in build/
