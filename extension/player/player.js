@@ -130,6 +130,34 @@ document.addEventListener("DOMContentLoaded", async () => {
   const iconFsEnter = document.getElementById("icon-fs-enter");
   const iconFsExit = document.getElementById("icon-fs-exit");
 
+  const btnExitPlayer = document.getElementById("btn-exit-player");
+  const speedSelect = document.getElementById("speed-select");
+  const btnPip = document.getElementById("btn-pip");
+
+  if (btnExitPlayer) {
+    btnExitPlayer.addEventListener("click", () => {
+      window.close();
+    });
+  }
+
+  if (speedSelect) {
+    speedSelect.addEventListener("change", (e) => {
+      video.playbackRate = parseFloat(e.target.value) || 1.0;
+    });
+  }
+
+  if (btnPip) {
+    btnPip.addEventListener("click", async () => {
+      try {
+        if (document.pictureInPictureElement) {
+          await document.exitPictureInPicture();
+        } else if (document.pictureInPictureEnabled && !video.disablePictureInPicture) {
+          await video.requestPictureInPicture();
+        }
+      } catch (err) {}
+    });
+  }
+
   const centerFlash = document.getElementById("center-play-flash");
   const flashSvgPlay = document.getElementById("flash-svg-play");
   const flashSvgPause = document.getElementById("flash-svg-pause");

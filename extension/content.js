@@ -535,8 +535,31 @@
         border-radius: 3px;
         white-space: nowrap;
       }
+      .torbox-search-box { margin-bottom: 10px; }
+      .torbox-search-input {
+        width: 100%;
+        padding: 8px 12px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        color: #fff;
+        font-size: 12px;
+        outline: none;
+        box-sizing: border-box;
+        transition: all 0.15s ease;
+      }
+      .torbox-search-input:focus {
+        border-color: #00d2ff;
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 10px rgba(0, 210, 255, 0.3);
+      }
       .torbox-badge-cached { background: #1b5e20; color: #a5d6a7; }
       .torbox-badge-uncached { background: #333; color: #999; }
+      .torbox-badge-4k { background: linear-gradient(135deg, #f5c518, #ff8c00); color: #000; font-weight: 700; }
+      .torbox-badge-1080p { background: #00d2ff; color: #000; font-weight: 700; }
+      .torbox-badge-720p { background: #26a69a; color: #fff; }
+      .torbox-badge-codec { background: rgba(255, 255, 255, 0.12); color: #b0bec5; border: 1px solid rgba(255, 255, 255, 0.15); }
+      .torbox-badge-audio { background: rgba(156, 39, 176, 0.25); color: #ce93d8; border: 1px solid rgba(156, 39, 176, 0.4); }
       .torbox-quality { font-weight: 600; color: #64b5f6; min-width: 50px; font-size: 13px; }
       .torbox-size { color: #ce93d8; min-width: 65px; text-align: right; font-size: 12px; }
       .torbox-seeders { color: #ffd54f; min-width: 40px; text-align: right; font-size: 12px; }
@@ -709,7 +732,7 @@
 
   // ─── Renderers ────────────────────────────────────────────────────────────
 
-  let activeFilters = { quality: "all", cachedOnly: false, playerPref: "auto" };
+  let activeFilters = { quality: "all", cachedOnly: false, playerPref: "auto", search: "" };
 
   async function loadPlayerPref() {
     const res = await browser.storage.local.get(["player_preference", "default_quality_filter"]);
@@ -729,7 +752,31 @@
     if (activeFilters.cachedOnly) {
       filtered = filtered.filter(s => s.cached);
     }
+    if (activeFilters.search && activeFilters.search.trim()) {
+      const q = activeFilters.search.trim().toLowerCase();
+      filtered = filtered.filter(s => 
+        (s.title || "").toLowerCase().includes(q) ||
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.quality || "").toLowerCase().includes(q)
+      );
+    }
     return filtered;
+  }
+
+  function renderMediaBadges(title) {
+    if (!title) return "";
+    let badges = "";
+    if (/4k|2160p|uhd/i.test(title)) badges += `<span class="torbox-badge torbox-badge-4k">4K</span>`;
+    else if (/1080p/i.test(title)) badges += `<span class="torbox-badge torbox-badge-1080p">1080p</span>`;
+    else if (/720p/i.test(title)) badges += `<span class="torbox-badge torbox-badge-720p">720p</span>`;
+
+    if (/hevc|x265|h\.?265/i.test(title)) badges += `<span class="torbox-badge torbox-badge-codec">HEVC</span>`;
+    else if (/x264|h\.?264/i.test(title)) badges += `<span class="torbox-badge torbox-badge-codec">x264</span>`;
+
+    if (/atmos/i.test(title)) badges += `<span class="torbox-badge torbox-badge-audio">Atmos</span>`;
+    else if (/5\.1|7\.1/i.test(title)) badges += `<span class="torbox-badge torbox-badge-audio">5.1</span>`;
+
+    return badges;
   }
 
   function renderStreams() {
@@ -753,6 +800,12 @@
 
     const qualities = ["all", ...new Set(currentStreams.map(s => s.quality).filter(Boolean))];
     const cachedCount = currentStreams.filter(s => s.cached).length;
+
+    html += `
+      <div class="torbox-search-box">
+        <input id="torbox-stream-search" type="text" class="torbox-search-input" placeholder="🔍 Search streams (YTS, 1080p, QxR, Atmos...)" value="${escapeHtml(activeFilters.search || "")}">
+      </div>
+    `;
 
     html += `<div class="torbox-filters">`;
     html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Quality</span>`;
@@ -784,6 +837,7 @@
         <div class="torbox-stream-item ${s.cached ? "cached" : "uncached"}" data-idx="${origIdx}">
           <span class="torbox-badge ${s.cached ? "torbox-badge-cached" : "torbox-badge-uncached"}">${s.cached ? "CACHED" : "—"}</span>
           <span class="torbox-quality">${escapeHtml(s.quality || "???")}</span>
+          ${renderMediaBadges(s.title || s.name)}
           <span class="torbox-size">${escapeHtml(s.size_human || "?")}</span>
           <span class="torbox-seeders">👤${s.seeders != null ? s.seeders : "?"}</span>
           <span class="torbox-title">${escapeHtml(s.title || "")}</span>
@@ -796,6 +850,19 @@
     }
 
     setModalBody(html);
+
+    const searchInput = document.getElementById("torbox-stream-search");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        activeFilters.search = e.target.value;
+        renderStreams();
+        const newSearch = document.getElementById("torbox-stream-search");
+        if (newSearch) {
+          newSearch.focus();
+          newSearch.setSelectionRange(newSearch.value.length, newSearch.value.length);
+        }
+      });
+    }
 
     const epBtn = document.getElementById("torbox-ep-go");
     if (epBtn) {

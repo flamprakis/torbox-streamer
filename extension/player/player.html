@@ -15,6 +15,7 @@
     <!-- Top Overlay (Vignette Header) -->
     <div id="top-overlay" class="player-top-overlay">
       <div class="top-left">
+        <button id="btn-exit-player" class="glass-pill-btn" title="Close Player Tab">← Exit</button>
         <span id="title" class="title">Loading stream...</span>
       </div>
     </div>
@@ -67,9 +68,21 @@
             </div>
           </div>
 
-          <!-- Right Group (Subtitles, External Players, Fullscreen) -->
+          <!-- Right Group (Speed, Subtitles, Desktop Launchers, PiP, Fullscreen) -->
           <div class="controls-group right-controls">
             
+            <!-- Playback Speed Pod -->
+            <div class="glass-pod speed-controls">
+              <span class="sub-label">⚡</span>
+              <select id="speed-select" class="glass-select" title="Playback Speed">
+                <option value="0.75">0.75x</option>
+                <option value="1.0" selected>1.0x</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+            </div>
+
             <!-- Subtitles Pod -->
             <div class="glass-pod sub-controls">
               <label for="sub-select" class="sub-label">💬</label>
@@ -88,6 +101,11 @@
               <button id="btn-copy" class="glass-pill-btn" title="Copy Stream URL">📋 Copy</button>
               <button id="btn-delete" class="glass-pill-btn glass-btn-danger" title="Delete Torrent">🗑️</button>
             </div>
+
+            <!-- Picture-in-Picture Button -->
+            <button id="btn-pip" class="glass-icon-btn" title="Picture-in-Picture (P)">
+              <svg class="svg-icon" viewBox="0 0 24 24"><path fill="currentColor" d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 1.98 2 1.98h18c1.1 0 2-.88 2-1.98V5c0-1.1-.9-2-2-2zm0 16.01H3V4.98h18v14.03z"/></svg>
+            </button>
 
             <!-- Fullscreen Button -->
             <button id="btn-fullscreen" class="glass-icon-btn" title="Toggle Fullscreen (F)">
