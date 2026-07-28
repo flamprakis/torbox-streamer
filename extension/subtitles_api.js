@@ -68,8 +68,8 @@ function parseSrtToVtt(srtText) {
   if (!srtText) return "WEBVTT\n\n";
 
   let vtt = "WEBVTT\n\n";
-  const normalized = srtText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const blocks = normalized.trim().split(/\n\s*\n/);
+  const cleanText = srtText.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const blocks = cleanText.trim().split(/\n\s*\n/);
 
   for (const block of blocks) {
     const lines = block.trim().split("\n");

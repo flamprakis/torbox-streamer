@@ -1,15 +1,19 @@
 var browser = typeof globalThis.browser !== "undefined" ? globalThis.browser : globalThis.chrome;
 
 function srtToVtt(srtText, delaySec = 0) {
+  if (!srtText) return "WEBVTT\n\n";
   let vtt = "WEBVTT\n\n";
-  const normalized = srtText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const blocks = normalized.split("\n\n");
+  const cleanText = srtText.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const blocks = cleanText.trim().split(/\n\s*\n/);
 
   for (const block of blocks) {
     const lines = block.trim().split("\n");
     if (lines.length < 2) continue;
 
-    let timeLineIdx = lines[0].includes("-->") ? 0 : 1;
+    let timeLineIdx = 0;
+    if (/^\d+$/.test(lines[0].trim())) {
+      timeLineIdx = 1;
+    }
     if (lines.length <= timeLineIdx || !lines[timeLineIdx].includes("-->")) continue;
 
     let timeLine = lines[timeLineIdx].replace(/,/g, ".");
@@ -33,23 +37,23 @@ function adjustVttTimeline(timeLine, delaySec) {
 }
 
 function shiftVttTime(timeStr, delaySec) {
-  const match = timeStr.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+  const match = timeStr.match(/(?:(\d{2}):)?(\d{2}):(\d{2})[.,](\d{3})/);
   if (!match) return timeStr;
 
-  let totalMs =
-    parseInt(match[1]) * 3600000 +
-    parseInt(match[2]) * 60000 +
-    parseInt(match[3]) * 1000 +
-    parseInt(match[4]);
+  const hours = parseInt(match[1] || "0");
+  const mins = parseInt(match[2]);
+  const secs = parseInt(match[3]);
+  const ms = parseInt(match[4]);
 
+  let totalMs = hours * 3600000 + mins * 60000 + secs * 1000 + ms;
   totalMs = Math.max(0, totalMs + Math.round(delaySec * 1000));
 
   const h = String(Math.floor(totalMs / 3600000)).padStart(2, "0");
   const m = String(Math.floor((totalMs % 3600000) / 60000)).padStart(2, "0");
   const s = String(Math.floor((totalMs % 60000) / 1000)).padStart(2, "0");
-  const ms = String(totalMs % 1000).padStart(3, "0");
+  const millis = String(totalMs % 1000).padStart(3, "0");
 
-  return `${h}:${m}:${s}.${ms}`;
+  return `${h}:${m}:${s}.${millis}`;
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -106,6 +110,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           opt.textContent = `${sub.label} (${sub.lang.toUpperCase()})`;
           subSelect.appendChild(opt);
         });
+
+        // Auto-select and load first available track
+        subSelect.value = "0";
+        await loadSelectedSubtitle(0, currentDelay);
       }
     } catch (e) {}
   }
@@ -138,7 +146,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const srtText = rawSubTexts[sub.url];
     const vttContent = srtToVtt(srtText, delay);
-    const blob = new Blob([vttContent], { type: "text/vtt" });
+    const blob = new Blob([vttContent], { type: "text/vtt;charset=utf-8" });
     activeTrackBlobUrl = URL.createObjectURL(blob);
 
     const track = document.createElement("track");
@@ -149,6 +157,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     track.default = true;
 
     video.appendChild(track);
+
+    // Ensure textTrack mode is activated as 'showing'
+    if (track.track) {
+      track.track.mode = "showing";
+    }
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = "showing";
+    }
   }
 
   if (subSelect) {
