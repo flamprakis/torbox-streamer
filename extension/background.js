@@ -53,6 +53,9 @@ async function getConfig() {
   const stored = await storage.get([
     "torbox_api_key",
     "player_preference",
+    "mpv_path",
+    "vlc_path",
+    "subtitle_languages",
     "torrentio_base_url",
     "max_results",
     "default_quality_filter",
@@ -62,6 +65,9 @@ async function getConfig() {
   return {
     apiKey: stored.torbox_api_key || "",
     playerPref: stored.player_preference || "auto",
+    mpv_path: stored.mpv_path || "",
+    vlc_path: stored.vlc_path || "",
+    subtitleLangs: stored.subtitle_languages || "en, browser",
     torrentioBaseUrl: stored.torrentio_base_url || "https://torrentio.strem.fun",
     maxResults: stored.max_results || 20,
     default_quality_filter: stored.default_quality_filter || "all",
@@ -96,28 +102,31 @@ async function tryLaunchPlayer(streamUrl, player = "mpv", subtitles = [], header
   const customPath = player === "vlc" ? config.vlc_path : config.mpv_path;
 
   return new Promise((resolve) => {
+    let port;
+    let timer;
+    let resolved = false;
+    const finish = (success) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      try { port?.disconnect(); } catch (e) {}
+      resolve(success);
+    };
     try {
-      const port = browser.runtime.connectNative(NATIVE_HOST);
-      let resolved = false;
+      port = browser.runtime.connectNative(NATIVE_HOST);
+      timer = setTimeout(() => finish(false), 10000);
 
       port.onMessage.addListener((msg) => {
-        if (!resolved) {
-          resolved = true;
-          port.disconnect();
-          resolve(msg && msg.status === "ok");
-        }
+        finish(!!msg && msg.status === "ok");
       });
 
       port.onDisconnect.addListener(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve(false);
-        }
+        finish(false);
       });
 
       port.postMessage({ action: "launch_player", player, custom_path: customPath || null, url: streamUrl, subtitles, headers });
     } catch (e) {
-      resolve(false);
+      finish(false);
     }
   });
 }
@@ -131,17 +140,20 @@ async function tryLaunchMpv(streamUrl) {
 async function fetchTorrentio(imdbId, season, episode) {
   const config = await getConfig();
   let path;
-  if (season && episode) {
+  if (season != null && episode != null) {
     path = `stream/series/${imdbId}:${season}:${episode}.json`;
   } else {
     path = `stream/movie/${imdbId}.json`;
   }
 
-  const url = `${config.torrentioBaseUrl}/${path}`;
+  const url = `${config.torrentioBaseUrl.replace(/\/+$/, "")}/${path}`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
   try {
     const resp = await fetch(url, {
       headers: { "Accept": "application/json" },
+      signal: controller.signal,
     });
 
     if (!resp.ok) {
@@ -155,7 +167,8 @@ async function fetchTorrentio(imdbId, season, episode) {
     }
 
     const data = JSON.parse(text);
-    const rawStreams = (data.streams || []).filter(s => s.infoHash);
+    if (data.streams != null && !Array.isArray(data.streams)) throw new Error("Invalid stream list received.");
+    const rawStreams = (data.streams || []).filter(s => s && typeof s.infoHash === "string" && s.infoHash);
 
     const parsedStreams = rawStreams.map((s, idx) => {
       const fullText = `${s.name || ""} ${s.title || ""}`;
@@ -174,6 +187,8 @@ async function fetchTorrentio(imdbId, season, episode) {
     return distributeStreamsByQuality(parsedStreams, config);
   } catch (e) {
     throw new Error(`Torrentio fetch failed: ${e.message}`);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -224,7 +239,7 @@ function distributeStreamsByQuality(streams, config = {}) {
 function parseQuality(text) {
   const t = text.toLowerCase();
   for (const q of ["2160p", "4k", "1080p", "720p", "480p", "360p"]) {
-    if (t.includes(q)) return q === "4k" ? "4K" : q;
+    if (t.includes(q)) return q === "4k" || q === "2160p" ? "4K" : q;
   }
   for (const q of ["web-dl", "webrip", "bluray", "bdrip", "hdrip", "dvdscr", "cam", "ts"]) {
     if (t.includes(q)) return q.toUpperCase();
@@ -266,7 +281,7 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
 
   sendProgress("Adding torrent to TorBox...");
   const torrentId = await torboxCreateTorrent(config.apiKey, magnet);
-  if (!torrentId) {
+  if (torrentId == null || String(torrentId).trim() === "") {
     throw new Error("Failed to add torrent to TorBox.");
   }
 
@@ -290,8 +305,9 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
   }
 
   // Pick file using smart file selection (filters out .nfo, .txt, samples)
-  const searchTitle = title || page_title || "";
-  const selectedFile = autoPickFile(torrent.files, file_idx, season, episode, searchTitle);
+  const searchTitle = page_title || title || "";
+  const selectedFile = autoPickFile(torrent.files, file_idx,
+    media_type === "movie" ? null : season, media_type === "movie" ? null : episode, searchTitle);
 
   if (!selectedFile || selectedFile.id == null || selectedFile.id === "" || isNaN(selectedFile.id)) {
     // Return file list for manual picking if auto-pick returned nothing or an invalid ID
@@ -337,8 +353,8 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
     last_stream_metadata: {
       imdb_id: imdb_id || "",
       media_type: media_type || "movie",
-      season: season || 1,
-      episode: episode || 1,
+      season: season ?? 1,
+      episode: episode ?? 1,
       torrent_id: torrentId
     }
   });
@@ -376,8 +392,8 @@ async function handleStreamRequest(data, senderTabId, sendProgress) {
     // Open in internal player tab
     const imdbIdParam = imdb_id || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].imdbId : "");
     const mediaTypeParam = media_type || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].mediaType : "movie");
-    const seasonParam = season || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].season : 1);
-    const episodeParam = episode || (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].episode : 1);
+    const seasonParam = season ?? (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].season : 1);
+    const episodeParam = episode ?? (senderTabId && tabInfo[senderTabId] ? tabInfo[senderTabId].episode : 1);
 
     let playerUrl = browser.runtime.getURL("player/player.html") +
       `?url=${encodeURIComponent(streamUrl)}` +
@@ -435,7 +451,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           const cacheMap = await torboxCheckCached(config.apiKey, msg.hashes);
           const updatedStreams = msg.streams.map(s => ({
             ...s,
-            cached: !!cacheMap[s.info_hash],
+            cached: !!cacheMap[s.info_hash.toLowerCase()],
           }));
           return { type: "CACHE_RESULT", streams: updatedStreams };
         } catch (e) {
@@ -458,7 +474,9 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return (async () => {
         try {
           const config = await getConfig();
+          if (!config.apiKey) throw new Error("TorBox API key missing. Please set it in options.");
           const streamUrl = torboxGetDownloadUrl(config.apiKey, msg.torrentId, msg.fileId);
+          if (!streamUrl) throw new Error("Please select a valid torrent file.");
           return { type: "PICK_FILE_RESULT", url: streamUrl };
         } catch (e) {
           return { type: "PICK_FILE_ERROR", message: e.message };
@@ -483,8 +501,7 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return tryLaunchPlayer(msg.url, msg.player || "mpv", msg.subtitles || []).then(success => ({ success }));
 
     case "FETCH_SUBTITLE_TEXT":
-      return fetch(msg.url)
-        .then(resp => { if (!resp.ok) throw new Error(`HTTP ${resp.status}`); return resp.text(); })
+      return fetchSubtitleText(msg.url)
         .then(text => ({ type: "SUBTITLE_TEXT_RESULT", success: true, text }))
         .catch(e => ({ type: "SUBTITLE_TEXT_RESULT", success: false, error: e.message }));
 
@@ -494,15 +511,38 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       return true;
 
     case "OPEN_PLAYER_TAB":
-      const playerUrl = browser.runtime.getURL("player/player.html") +
-        `?url=${encodeURIComponent(msg.url)}` +
-        `&title=${encodeURIComponent(msg.title || "Stream")}` +
-        `&torrent_id=${msg.torrentId || ""}`;
-      browser.tabs.create({ url: playerUrl });
-      sendResponse({ success: true });
-      return true;
+      return (async () => {
+        const metadata = tabInfo[senderTabId] || {};
+        const params = new URLSearchParams({ url: msg.url, title: msg.title || "Stream" });
+        const fields = {
+          torrent_id: msg.torrentId ?? msg.torrent_id,
+          imdb_id: msg.imdb_id ?? msg.imdbId ?? metadata.imdbId,
+          media_type: msg.media_type ?? msg.mediaType ?? metadata.mediaType,
+          season: msg.season ?? metadata.season,
+          episode: msg.episode ?? metadata.episode,
+        };
+        for (const [key, value] of Object.entries(fields)) {
+          if (value != null && value !== "") params.set(key, value);
+        }
+        const playerUrl = browser.runtime.getURL("player/player.html") + `?${params}`;
+        await browser.tabs.create({ url: playerUrl });
+        return { success: true };
+      })().catch(e => ({ success: false, message: e.message }));
   }
 });
+
+async function fetchSubtitleText(url) {
+  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) throw new Error("Invalid subtitle URL.");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // Toolbar icon click → open options page or trigger modal
 const actionApi = browser.action || browser.browserAction;

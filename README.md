@@ -70,7 +70,7 @@ For developers who clone the repository and want to run directly from source:
 git clone https://github.com/flamprakis/torbox-streamer.git
 cd torbox-streamer
 
-# Run automated Vitest unit suite (42 unit tests), Playwright Firefox/Chrome E2E suite (6 tests), and Python native host E2E suite (11 tests)
+# Run the Vitest source/contract unit suite (80 tests), the offline Playwright DOM/extension E2E suite (69 tests), and the Python native-host/packaging contract suite (29 tests)
 npm test
 
 # Build release zip assets in build/
@@ -108,7 +108,7 @@ torbox-streamer/
 │   ├── install.py              # Cross-platform Python installer & CLI flags
 │   └── native_host.py          # Native messaging bridge source
 ├── tests/                      # Automated Test Framework
-│   ├── unit/                   # Vitest unit test suite (35 tests)
+│   ├── unit/                   # Vitest source/contract unit suite (80 tests)
 │   └── e2e/                    # Playwright Firefox & Chromium E2E suite
 ├── cli/                        # Standalone Terminal CLI Tool
 ├── package.py                  # Dual release zip builder (Firefox MV2 & Chrome MV3)

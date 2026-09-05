@@ -385,3 +385,9 @@ video::cue {
   border-color: rgba(220, 53, 69, 0.6);
   color: #fff;
 }
+.subtitle-status {
+  color: #d8d8df;
+  font-size: 12px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}

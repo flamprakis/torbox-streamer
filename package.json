@@ -4,13 +4,16 @@
   "description": "TorBox Streamer browser extension for Firefox & Waterfox",
   "main": "extension/background.js",
   "scripts": {
+    "build": "python3 package.py",
+    "lint": "eslint extension tests playwright.config.js vitest.config.mjs",
     "test:unit": "vitest run tests/unit",
+    "test:unit:coverage": "vitest run tests/unit --coverage",
     "test:unit:watch": "vitest tests/unit",
-    "test:e2e:mock": "playwright test tests/e2e/mock",
+    "test:e2e:mock": "npm run build && playwright test tests/e2e/mock tests/e2e/extension",
     "test:e2e:native": "python3 -m unittest discover -s tests/e2e -p \"test_*.py\"",
-    "test:e2e:online": "playwright test tests/e2e/online",
+    "test:e2e:online": "npm run build && playwright test --config playwright.online.config.js",
     "test:e2e": "npm run test:e2e:mock && npm run test:e2e:native",
-    "test": "npm run test:unit && npm run test:e2e"
+    "test": "npm run lint && npm run test:unit:coverage && npm run test:e2e"
   },
   "keywords": [
     "torbox",
@@ -21,8 +24,14 @@
   ],
   "author": "flamprakis",
   "license": "MIT",
+  "engines": {
+    "node": "^20.19.0 || ^22.12.0 || >=24.0.0"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.49.1",
-    "vitest": "^2.1.8"
+    "@playwright/test": "1.62.0",
+    "@vitest/coverage-v8": "^4.1.9",
+    "eslint": "^9.39.0",
+    "globals": "^16.5.0",
+    "vitest": "^4.1.9"
   }
 }

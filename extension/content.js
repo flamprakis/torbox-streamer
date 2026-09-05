@@ -11,9 +11,12 @@
   // ─── State ────────────────────────────────────────────────────────────────
   let imdbInfo = null;
   let currentStreams = [];
-  let currentTorrentId = null;
   let modalEl = null;
   let escHandler = null;
+  let modalRequest = 0;
+  let streamPending = false;
+  let previousFocus = null;
+  let tmdbInfoTimer = null;
 
   // ─── IMDb Detection ───────────────────────────────────────────────────────
 
@@ -60,7 +63,7 @@
 
     if (seMatch) {
       mediaType = "series";
-      season = parseInt(seMatch[1]) || 1;
+      season = parseInt(seMatch[1], 10);
       episode = parseInt(seMatch[2]) || 1;
     }
 
@@ -97,7 +100,8 @@
 
     // 1. Extract TMDB numeric ID from URL (always available)
     const tmdbMatch = url.match(/\/(movie|tv)\/(\d+)/);
-    if (tmdbMatch) tmdbId = tmdbMatch[2];
+    if (!tmdbMatch) return null;
+    tmdbId = tmdbMatch[2];
 
     // 2. Parse <title> tag — most reliable source for title + year
     //    Format: "Inception (2010) — The Movie Database (TMDB)"
@@ -137,8 +141,11 @@
     // 5. Season/Episode from URL: /tv/1396/season/1/episode/1
     const epMatch = url.match(/\/season\/(\d+)\/episode\/(\d+)/i);
     if (epMatch) {
-      season = parseInt(epMatch[1]) || 1;
+      season = parseInt(epMatch[1], 10);
       episode = parseInt(epMatch[2]) || 1;
+    } else {
+      const seasonMatch = url.match(/\/season\/(\d+)/i);
+      if (seasonMatch) season = parseInt(seasonMatch[1], 10);
     }
 
     return { imdbId: pageImdbId, tmdbId, mediaType, title, year, season, episode, url };
@@ -213,41 +220,38 @@
     return null;
   }
 
-  async function ensureImdbId() {
-    if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
+  async function ensureImdbId(info) {
+    if (info && info.imdbId) return info;
 
-    imdbInfo = extractTmdbInfo();
-    if (imdbInfo && imdbInfo.imdbId) return imdbInfo;
+    info = extractTmdbInfo();
+    if (info && info.imdbId) return info;
 
-    if (imdbInfo && imdbInfo.tmdbId) {
-      const cinemetaId = await resolveImdbIdByTmdbId(imdbInfo.tmdbId, imdbInfo.mediaType);
+    if (info && info.tmdbId) {
+      const cinemetaId = await resolveImdbIdByTmdbId(info.tmdbId, info.mediaType);
       if (cinemetaId) {
-        imdbInfo.imdbId = cinemetaId;
-        return imdbInfo;
+        info.imdbId = cinemetaId;
+        return info;
       }
     }
 
-    if (imdbInfo && imdbInfo.title) {
-      const resolvedId = await resolveImdbIdByTitle(imdbInfo.title, imdbInfo.year, imdbInfo.mediaType);
+    if (info && info.title) {
+      const resolvedId = await resolveImdbIdByTitle(info.title, info.year, info.mediaType);
       if (resolvedId) {
-        imdbInfo.imdbId = resolvedId;
-        return imdbInfo;
+        info.imdbId = resolvedId;
+        return info;
       }
     }
 
-    return imdbInfo;
+    return info;
   }
 
   function injectTmdbButton() {
     if (document.getElementById("torbox-play-btn")) return;
 
     const container = document.querySelector("ul.actions") || document.querySelector(".actions ul") || document.querySelector("ul.shortcut_bar") || document.querySelector("div.action_bar") || document.querySelector(".header_info");
-    if (!container) {
-      setTimeout(injectTmdbButton, 800);
-      return;
-    }
+    if (!container) return;
 
-    const li = document.createElement("li");
+    const li = document.createElement(container.tagName === "UL" ? "li" : "div");
     li.className = "chart torbox-action-item";
     li.style.cssText = "display:inline-flex;align-items:center;margin-left:10px;";
 
@@ -302,27 +306,26 @@
 
     li.appendChild(btn);
 
-    if (container.tagName === "UL") {
-      container.appendChild(li);
-    } else {
-      container.appendChild(li);
-    }
+    container.appendChild(li);
   }
 
   function initTmdb() {
-    injectTmdbButton();
+    clearInterval(tmdbInfoTimer);
     imdbInfo = extractTmdbInfo();
+    if (!imdbInfo) return;
+    injectTmdbButton();
     if (imdbInfo && imdbInfo.imdbId) {
       browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
     } else {
       let retries = 0;
-      const interval = setInterval(() => {
+      tmdbInfoTimer = setInterval(() => {
         retries++;
-        imdbInfo = extractTmdbInfo();
-        if ((imdbInfo && imdbInfo.imdbId) || retries > 10) {
-          clearInterval(interval);
-          if (imdbInfo && imdbInfo.imdbId) {
-            browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+        const info = extractTmdbInfo();
+        if (info?.imdbId || retries > 10) {
+          clearInterval(tmdbInfoTimer);
+          if (info?.imdbId) {
+            if (!modalEl) imdbInfo = info;
+            browser.runtime.sendMessage({ type: "PAGE_INFO", data: info });
           }
         }
       }, 500);
@@ -350,12 +353,9 @@
       if (container) break;
     }
 
-    if (!container) {
-      setTimeout(injectButton, 1500);
-      return;
-    }
+    if (!container) return;
 
-    const li = document.createElement("li");
+    const li = document.createElement(container.tagName === "UL" ? "li" : "div");
     li.className = "ipc-inline-list__item";
     li.style.cssText = "display:flex;align-items:center;";
 
@@ -650,21 +650,23 @@
 
     // On TMDB pages, use extractTmdbInfo; on IMDb pages, use extractImdbInfo
     if (window.location.hostname.includes("themoviedb.org")) {
-      if (!imdbInfo || !imdbInfo.imdbId) {
-        imdbInfo = extractTmdbInfo();
-      }
+      imdbInfo = extractTmdbInfo();
     } else {
       imdbInfo = extractImdbInfo();
     }
 
     injectStyles();
+    previousFocus = document.activeElement;
+    activeFilters.search = "";
+    activeFilters.cachedOnly = false;
+    currentStreams = [];
 
     modalEl = document.createElement("div");
     modalEl.id = "torbox-modal-overlay";
     modalEl.innerHTML = `
-      <div id="torbox-modal">
+      <div id="torbox-modal" role="dialog" aria-modal="true" aria-labelledby="torbox-modal-title" tabindex="-1">
         <div id="torbox-modal-header">
-          <h3>
+          <h3 id="torbox-modal-title">
             <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="7" stroke="#f5c518" stroke-width="1.5"/>
               <polygon points="6.5,5 6.5,11 11.5,8" fill="#f5c518"/>
@@ -672,8 +674,8 @@
             TorBox Streamer
           </h3>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button id="torbox-modal-options" title="Settings / Options" style="background:none;border:none;color:#a0a0b0;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;">⚙️</button>
-            <button id="torbox-modal-close">&times;</button>
+            <button id="torbox-modal-options" type="button" aria-label="Settings" title="Settings / Options" style="background:none;border:none;color:#a0a0b0;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;">⚙️</button>
+            <button id="torbox-modal-close" type="button" aria-label="Close TorBox Streamer">&times;</button>
           </div>
         </div>
         <div id="torbox-modal-body"></div>
@@ -689,14 +691,32 @@
       if (e.target === modalEl) closeModal();
     });
     escHandler = (e) => {
-      if (e.key === "Escape") closeModal();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
+      } else if (e.key === "Tab" && modalEl) {
+        const focusable = [...modalEl.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]')]
+          .filter(el => el.getClientRects().length);
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && (document.activeElement === first || !modalEl.contains(document.activeElement))) {
+          e.preventDefault();
+          if (last) last.focus();
+        } else if (!e.shiftKey && (document.activeElement === last || !modalEl.contains(document.activeElement))) {
+          e.preventDefault();
+          if (first) first.focus();
+        }
+      }
     };
     document.addEventListener("keydown", escHandler);
+    modalEl.querySelector("#torbox-modal-close").focus();
 
     fetchStreams();
   }
 
   function closeModal() {
+    modalRequest++;
+    streamPending = false;
     if (modalEl) {
       modalEl.remove();
       modalEl = null;
@@ -705,20 +725,28 @@
       document.removeEventListener("keydown", escHandler);
       escHandler = null;
     }
+    if (previousFocus && previousFocus.isConnected) previousFocus.focus();
+    previousFocus = null;
+  }
+
+  function isActiveRequest(requestId) {
+    return modalEl !== null && requestId === modalRequest;
   }
 
   function setModalBody(html) {
-    const body = document.getElementById("torbox-modal-body");
+    const body = modalEl && modalEl.querySelector("#torbox-modal-body");
     if (body) {
       const parsed = new DOMParser().parseFromString(html, "text/html");
       body.replaceChildren(...parsed.body.childNodes);
+      body.querySelectorAll(".torbox-loading, .torbox-success, .torbox-stats").forEach(el => el.setAttribute("role", "status"));
+      body.querySelectorAll(".torbox-error").forEach(el => el.setAttribute("role", "alert"));
     }
   }
 
   // ─── Background Messaging ────────────────────────────────────────────────
 
   browser.runtime.onMessage.addListener((msg) => {
-    if (msg.type === "STREAM_PROGRESS") {
+    if (msg.type === "STREAM_PROGRESS" && streamPending) {
       setModalBody(`
         <div class="torbox-loading">
           <div class="torbox-spinner"></div>
@@ -734,14 +762,13 @@
 
   let activeFilters = { quality: "all", cachedOnly: false, playerPref: "auto", search: "" };
 
-  async function loadPlayerPref() {
+  async function loadPlayerPref(requestId) {
     const res = await browser.storage.local.get(["player_preference", "default_quality_filter"]);
-    if (res && res.player_preference) {
-      activeFilters.playerPref = res.player_preference;
-    }
-    if (res && res.default_quality_filter) {
-      activeFilters.quality = res.default_quality_filter;
-    }
+    if (!isActiveRequest(requestId)) return;
+    activeFilters.playerPref = ["auto", "ask", "browser", "mpv", "vlc"].includes(res && res.player_preference)
+      ? res.player_preference : "auto";
+    activeFilters.quality = ["all", "4K", "1080p", "720p", "480p"].includes(res && res.default_quality_filter)
+      ? res.default_quality_filter : "all";
   }
 
   function getFilteredStreams() {
@@ -780,16 +807,18 @@
   }
 
   function renderStreams() {
+    if (!modalEl) return;
+    streamPending = false;
     let html = "";
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
-      const currentS = imdbInfo.season || 1;
+      const currentS = imdbInfo.season ?? 1;
       const currentE = imdbInfo.episode || 1;
       html += `
         <div class="torbox-episode-picker">
-          <label>S</label><input id="torbox-season" type="number" min="1" value="${currentS}">
-          <label>E</label><input id="torbox-episode" type="number" min="1" value="${currentE}">
-          <button id="torbox-ep-go">Go</button>
+          <label for="torbox-season">Season</label><input id="torbox-season" type="number" min="0" step="1" required value="${currentS}">
+          <label for="torbox-episode">Episode</label><input id="torbox-episode" type="number" min="1" step="1" required value="${currentE}">
+          <button id="torbox-ep-go" type="button">Go</button>
         </div>
       `;
     }
@@ -798,12 +827,12 @@
       currentStreams = [];
     }
 
-    const qualities = ["all", ...new Set(currentStreams.map(s => s.quality).filter(Boolean))];
+    const qualities = [...new Set(["all", activeFilters.quality, ...currentStreams.map(s => s.quality).filter(Boolean)])];
     const cachedCount = currentStreams.filter(s => s.cached).length;
 
     html += `
       <div class="torbox-search-box">
-        <input id="torbox-stream-search" type="text" class="torbox-search-input" placeholder="🔍 Search streams (YTS, 1080p, QxR, Atmos...)" value="${escapeHtml(activeFilters.search || "")}">
+        <input id="torbox-stream-search" type="text" aria-label="Search streams" class="torbox-search-input" placeholder="🔍 Search streams (YTS, 1080p, QxR, Atmos...)" value="${escapeHtml(activeFilters.search || "")}">
       </div>
     `;
 
@@ -812,7 +841,7 @@
     qualities.forEach(q => {
       const label = q === "all" ? "All" : q;
       const active = activeFilters.quality === q ? "active" : "";
-      html += `<button class="torbox-filter-btn ${active}" data-filter-quality="${q}">${label}</button>`;
+      html += `<button type="button" class="torbox-filter-btn ${active}" aria-pressed="${active ? "true" : "false"}" data-filter-quality="${escapeHtml(q)}">${escapeHtml(label)}</button>`;
     });
     html += `</div>`;
 
@@ -820,12 +849,12 @@
     ["auto", "ask", "browser", "mpv", "vlc"].forEach(p => {
       const label = p === "auto" ? "Auto" : (p === "ask" ? "ASK" : p.toUpperCase());
       const active = activeFilters.playerPref === p ? "active" : "";
-      html += `<button class="torbox-filter-btn ${active}" data-filter-player="${p}">${label}</button>`;
+      html += `<button type="button" class="torbox-filter-btn ${active}" aria-pressed="${active ? "true" : "false"}" data-filter-player="${p}">${label}</button>`;
     });
     html += `</div>`;
 
     html += `<div class="torbox-filter-group"><span class="torbox-filter-label">Status</span>`;
-    html += `<button class="torbox-filter-btn ${activeFilters.cachedOnly ? 'active' : ''}" data-filter-cached="true">Cached Only (${cachedCount})</button>`;
+    html += `<button type="button" class="torbox-filter-btn ${activeFilters.cachedOnly ? 'active' : ''}" aria-pressed="${activeFilters.cachedOnly}" data-filter-cached="true">Cached Only (${cachedCount})</button>`;
     html += `</div></div>`;
 
     const filtered = getFilteredStreams();
@@ -834,19 +863,19 @@
     filtered.forEach((s, i) => {
       const origIdx = currentStreams.indexOf(s);
       html += `
-        <div class="torbox-stream-item ${s.cached ? "cached" : "uncached"}" data-idx="${origIdx}">
+        <div class="torbox-stream-item ${s.cached ? "cached" : "uncached"}" role="button" tabindex="0" aria-label="Play ${escapeHtml(s.title || s.name || 'stream')}" data-idx="${origIdx}">
           <span class="torbox-badge ${s.cached ? "torbox-badge-cached" : "torbox-badge-uncached"}">${s.cached ? "CACHED" : "—"}</span>
           <span class="torbox-quality">${escapeHtml(s.quality || "???")}</span>
           ${renderMediaBadges(s.title || s.name)}
           <span class="torbox-size">${escapeHtml(s.size_human || "?")}</span>
-          <span class="torbox-seeders">👤${s.seeders != null ? s.seeders : "?"}</span>
+          <span class="torbox-seeders">👤${escapeHtml(s.seeders != null ? s.seeders : "?")}</span>
           <span class="torbox-title">${escapeHtml(s.title || "")}</span>
         </div>
       `;
     });
 
     if (filtered.length === 0) {
-      html += `<div class="torbox-error">No streams match the current filters.</div>`;
+      html += `<div class="torbox-error">${currentStreams.length ? "No streams match the current filters." : "No streams found for this title or episode."}</div>`;
     }
 
     setModalBody(html);
@@ -866,65 +895,104 @@
 
     const epBtn = document.getElementById("torbox-ep-go");
     if (epBtn) {
-      epBtn.addEventListener("click", () => { activeFilters.quality = "all"; activeFilters.cachedOnly = false; fetchStreams(); });
+      epBtn.addEventListener("click", () => { activeFilters.quality = "all"; activeFilters.cachedOnly = false; activeFilters.search = ""; fetchStreams(); });
+      ["torbox-season", "torbox-episode"].forEach(id => {
+        document.getElementById(id).addEventListener("keydown", event => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            epBtn.click();
+          }
+        });
+      });
     }
 
-    document.querySelectorAll("[data-filter-quality]").forEach(btn => {
+    modalEl.querySelectorAll("[data-filter-quality]").forEach(btn => {
       btn.addEventListener("click", () => {
         activeFilters.quality = btn.dataset.filterQuality;
         renderStreams();
       });
     });
-    document.querySelectorAll("[data-filter-player]").forEach(btn => {
+    modalEl.querySelectorAll("[data-filter-player]").forEach(btn => {
       btn.addEventListener("click", async () => {
+        const activeModal = modalEl;
         const pref = btn.dataset.filterPlayer;
         activeFilters.playerPref = pref;
-        await browser.storage.local.set({ player_preference: pref });
         renderStreams();
+        try {
+          await browser.storage.local.set({ player_preference: pref });
+        } catch (error) {
+          if (modalEl === activeModal) {
+            const notice = document.createElement("p");
+            notice.className = "torbox-error";
+            notice.setAttribute("role", "alert");
+            notice.textContent = `Could not save player preference: ${error.message}`;
+            modalEl.querySelector("#torbox-modal-body").appendChild(notice);
+          }
+        }
       });
     });
-    document.querySelectorAll("[data-filter-cached]").forEach(btn => {
+    modalEl.querySelectorAll("[data-filter-cached]").forEach(btn => {
       btn.addEventListener("click", () => {
         activeFilters.cachedOnly = !activeFilters.cachedOnly;
         renderStreams();
       });
     });
 
-    document.querySelectorAll(".torbox-stream-item").forEach(el => {
+    modalEl.querySelectorAll(".torbox-stream-item").forEach(el => {
       el.addEventListener("click", () => {
         const idx = parseInt(el.dataset.idx);
         pickStream(currentStreams[idx]);
+      });
+      el.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          el.click();
+        }
       });
     });
   }
 
   function renderFilePicker(torrentId, files) {
-    currentTorrentId = torrentId;
+    if (!modalEl) return;
+    if (!Array.isArray(files) || !files.length) {
+      renderRequestError("This torrent has no files available to select.", renderStreams, renderStreams);
+      return;
+    }
     let html = '<p style="color:#8899aa;margin-bottom:10px;">Pick a file to stream:</p>';
     files.forEach((f) => {
       const isVideo = VIDEO_EXTS.has(getFileExt(f.name));
       const icon = isVideo ? "🎬" : "📎";
-      html += `<div class="torbox-file-item" data-file-id="${f.id}">${icon} ${escapeHtml(f.name)} <span style="color:#888;font-size:11px;">(${escapeHtml(f.size_human)})</span></div>`;
+      html += `<div class="torbox-file-item" role="button" tabindex="0" data-file-id="${escapeHtml(f.id)}">${icon} ${escapeHtml(f.name)} <span style="color:#888;font-size:11px;">(${escapeHtml(f.size_human)})</span></div>`;
     });
     html += '<div style="text-align:center;margin-top:10px;"><button class="torbox-btn torbox-btn-secondary" id="torbox-cancel-files">Cancel</button></div>';
     setModalBody(html);
 
-    document.querySelectorAll(".torbox-file-item").forEach((el) => {
+    modalEl.querySelectorAll(".torbox-file-item").forEach((el) => {
       el.addEventListener("click", async () => {
+        const requestId = ++modalRequest;
         setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Getting stream URL...</p></div>');
         const fileId = parseInt(el.dataset.fileId);
         try {
-          const resp = await browser.runtime.sendMessage({ type: "PICK_FILE", torrentId: currentTorrentId, fileId });
+          const resp = await browser.runtime.sendMessage({ type: "PICK_FILE", torrentId, fileId });
+          if (!isActiveRequest(requestId)) return;
           if (resp && resp.url) {
             handleStreamSuccess({
               method: "url_only",
               url: resp.url,
-              torrent_id: currentTorrentId,
-              file_name: "Selected File",
+              torrent_id: torrentId,
+              file_name: files.find(file => Number(file.id) === fileId)?.name || "Selected File",
             });
+          } else {
+            throw new Error(resp?.message || "No stream URL returned for the selected file.");
           }
         } catch (e) {
-          setModalBody(`<div class="torbox-error">⚠ ${escapeHtml(e.message)}</div>`);
+          if (isActiveRequest(requestId)) renderRequestError(e.message, () => renderFilePicker(torrentId, files), renderStreams);
+        }
+      });
+      el.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          el.click();
         }
       });
     });
@@ -935,7 +1003,21 @@
   }
 
   function handleStreamSuccess(data) {
-    currentTorrentId = data.torrent_id;
+    if (!modalEl) return;
+    const activeModal = modalEl;
+
+    function showActionError(message) {
+      if (modalEl !== activeModal) return;
+      let notice = modalEl.querySelector("#torbox-action-error");
+      if (!notice) {
+        notice = document.createElement("p");
+        notice.id = "torbox-action-error";
+        notice.className = "torbox-error";
+        notice.setAttribute("role", "alert");
+        modalEl.querySelector("#torbox-modal-body").appendChild(notice);
+      }
+      notice.textContent = message;
+    }
 
     let statusIcon = "🎬";
     let statusText = "Stream Ready!";
@@ -958,7 +1040,7 @@
       <div class="torbox-success">
         <p style="font-size:28px;margin-bottom:8px;">${statusIcon}</p>
         <p><strong>${statusText}</strong></p>
-        <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${data.file_size || ""})</p>
+        <p style="font-size:12px;margin-top:6px;opacity:0.8;">${escapeHtml(data.file_name || "")} (${escapeHtml(data.file_size || "")})</p>
       </div>
       <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:12px;">
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
@@ -980,44 +1062,55 @@
     `);
 
     document.getElementById("torbox-try-browser-btn").addEventListener("click", async () => {
-      await browser.runtime.sendMessage({
-        type: "OPEN_PLAYER_TAB",
-        url: data.url,
-        title: data.file_name,
-        torrentId: data.torrent_id,
+      const button = document.getElementById("torbox-try-browser-btn");
+      button.disabled = true;
+      try {
+        const response = await browser.runtime.sendMessage({
+          type: "OPEN_PLAYER_TAB",
+          url: data.url,
+          title: data.file_name,
+          torrentId: data.torrent_id,
+          imdb_id: imdbInfo?.imdbId,
+          media_type: imdbInfo?.mediaType || "movie",
+          season: imdbInfo?.season,
+          episode: imdbInfo?.episode,
+        });
+        if (!response?.success) throw new Error(response?.error || "Could not open player.");
+      } catch (error) {
+        showActionError(`Could not open browser player: ${error.message}`);
+      } finally {
+        button.disabled = false;
+      }
+    });
+
+    ["mpv", "vlc"].forEach(player => {
+      const button = document.getElementById(`torbox-try-${player}-btn`);
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        button.textContent = `Launching ${player.toUpperCase()}...`;
+        try {
+          const response = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player, url: data.url });
+          if (!response?.success) throw new Error(response?.error || "Check that the native helper and player are installed.");
+          button.textContent = `Launched in ${player.toUpperCase()}!`;
+        } catch (error) {
+          showActionError(`Could not launch ${player.toUpperCase()}: ${error.message}`);
+          button.textContent = `Open in ${player.toUpperCase()}`;
+        } finally {
+          button.disabled = false;
+        }
       });
-    });
-
-    document.getElementById("torbox-try-mpv-btn").addEventListener("click", async () => {
-      const mpvBtn = document.getElementById("torbox-try-mpv-btn");
-      mpvBtn.textContent = "Launching MPV...";
-      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "mpv", url: data.url });
-      if (resp && resp.success) {
-        mpvBtn.textContent = "Launched in MPV! 🍿";
-      } else {
-        alert("Helper script not installed or MPV binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
-        mpvBtn.textContent = "🚀 Open in MPV";
-      }
-    });
-
-    document.getElementById("torbox-try-vlc-btn").addEventListener("click", async () => {
-      const vlcBtn = document.getElementById("torbox-try-vlc-btn");
-      vlcBtn.textContent = "Launching VLC...";
-      const resp = await browser.runtime.sendMessage({ type: "TRY_PLAYER", player: "vlc", url: data.url });
-      if (resp && resp.success) {
-        vlcBtn.textContent = "Launched in VLC! 🍿";
-      } else {
-        alert("Helper script not installed or VLC binary missing. Run 'helpers/install.sh' (or 'install.bat' on Windows) to enable.");
-        vlcBtn.textContent = "🍊 Open in VLC";
-      }
     });
 
     const copyBtn = document.getElementById("torbox-copy-btn");
     if (copyBtn) {
-      copyBtn.addEventListener("click", () => {
-        navigator.clipboard.writeText(data.url);
-        copyBtn.textContent = "Copied!";
-        setTimeout(() => copyBtn.textContent = "📋 Copy Stream Link", 2000);
+      copyBtn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(data.url);
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => copyBtn.textContent = "📋 Copy Stream Link", 2000);
+        } catch (error) {
+          showActionError(`Could not copy stream link: ${error.message}`);
+        }
       });
     }
 
@@ -1031,20 +1124,23 @@
     const delBtn = document.getElementById("torbox-del-btn");
     if (delBtn) {
       delBtn.addEventListener("click", async () => {
+        const requestId = ++modalRequest;
         setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Deleting torrent...</p></div>');
-        const resp = await browser.runtime.sendMessage({ type: "DELETE_TORRENT", torrentId: currentTorrentId });
-        if (resp && resp.success) {
+        try {
+          const resp = await browser.runtime.sendMessage({ type: "DELETE_TORRENT", torrentId: data.torrent_id });
+          if (!isActiveRequest(requestId)) return;
+          if (!resp?.success) throw new Error(resp?.message || "Failed to delete torrent.");
           setModalBody(`
-            <div class="torbox-success">
-              <p>✅ Torrent deleted from TorBox.</p>
-            </div>
-            <div style="text-align:center;">
-              <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn2">Close</button>
-            </div>
-          `);
+              <div class="torbox-success">
+                <p>✅ Torrent deleted from TorBox.</p>
+              </div>
+              <div style="text-align:center;">
+                <button class="torbox-btn torbox-btn-secondary" id="torbox-done-btn2">Close</button>
+              </div>
+            `);
           document.getElementById("torbox-done-btn2").addEventListener("click", closeModal);
-        } else {
-          setModalBody(`<div class="torbox-error">Failed to delete torrent.</div>`);
+        } catch (error) {
+          if (isActiveRequest(requestId)) renderRequestError(error.message, () => handleStreamSuccess(data), renderStreams);
         }
       });
     }
@@ -1055,104 +1151,95 @@
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
+  function renderRequestError(message, retry, cancel) {
+    if (!modalEl) return;
+    setModalBody(`
+      <div class="torbox-error">⚠ ${escapeHtml(message)}</div>
+      <div style="text-align:center;margin-top:12px;">
+        <button type="button" class="torbox-btn torbox-btn-primary" id="torbox-retry-btn">Retry</button>
+        ${cancel ? '<button type="button" class="torbox-btn torbox-btn-secondary" id="torbox-cancel-request">Back to Streams</button>' : ""}
+      </div>
+    `);
+    document.getElementById("torbox-retry-btn").addEventListener("click", retry);
+    if (cancel) document.getElementById("torbox-cancel-request").addEventListener("click", cancel);
+  }
+
   async function fetchStreams() {
-    setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Resolving title info & fetching streams...</p></div>');
-
-    if (window.location.hostname.includes("themoviedb.org")) {
-      await ensureImdbId();
-    } else if (!imdbInfo || !imdbInfo.imdbId) {
-      imdbInfo = extractImdbInfo();
-    }
-
-    if (!imdbInfo || !imdbInfo.imdbId) {
-      setModalBody(`
-        <div class="torbox-error">
-          ⚠ Could not resolve IMDb ID for this title.<br>
-          <span style="font-size:12px;opacity:0.8;margin-top:6px;display:block;">Try refreshing the page or ensuring external links are loaded.</span>
-        </div>
-      `);
-      return;
-    }
-
-    let targetSeason = imdbInfo.season || 1;
-    let targetEpisode = imdbInfo.episode || 1;
-
+    if (!modalEl) return;
+    // Capture and validate the picker before replacing its DOM with the loading state.
     const sEl = document.getElementById("torbox-season");
     const eEl = document.getElementById("torbox-episode");
-    if (sEl && eEl) {
-      targetSeason = parseInt(sEl.value) || targetSeason;
-      targetEpisode = parseInt(eEl.value) || targetEpisode;
-      imdbInfo.season = targetSeason;
-      imdbInfo.episode = targetEpisode;
-    }
-
-    setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Fetching streams from Torrentio...</p></div>');
-
-    const msg = { type: "FETCH_TORRENTIO", imdbId: imdbInfo.imdbId };
-    if (imdbInfo.mediaType === "series") {
-      msg.season = targetSeason;
-      msg.episode = targetEpisode;
-    }
+    if ((sEl && !sEl.reportValidity()) || (eEl && !eEl.reportValidity())) return;
+    const selectedSeason = sEl ? Number(sEl.value) : null;
+    const selectedEpisode = eEl ? Number(eEl.value) : null;
+    const requestId = ++modalRequest;
+    streamPending = false;
+    setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Resolving title info & fetching streams...</p></div>');
 
     try {
+      if (window.location.hostname.includes("themoviedb.org")) {
+        const info = await ensureImdbId(imdbInfo);
+        if (!isActiveRequest(requestId)) return;
+        imdbInfo = info;
+      } else if (!imdbInfo || !imdbInfo.imdbId) {
+        imdbInfo = extractImdbInfo();
+      }
+      if (!imdbInfo || !imdbInfo.imdbId) {
+        throw new Error("Could not resolve IMDb ID for this title. Try again after its external links have loaded.");
+      }
+      imdbInfo.season = selectedSeason ?? imdbInfo.season ?? 1;
+      imdbInfo.episode = selectedEpisode ?? imdbInfo.episode ?? 1;
+      const msg = { type: "FETCH_TORRENTIO", imdbId: imdbInfo.imdbId };
+      if (imdbInfo.mediaType === "series") {
+        msg.season = imdbInfo.season;
+        msg.episode = imdbInfo.episode;
+      }
+      setModalBody('<div class="torbox-loading"><div class="torbox-spinner"></div><p>Fetching streams from Torrentio...</p></div>');
       const resp = await browser.runtime.sendMessage(msg);
-      if (!resp) {
+      if (!isActiveRequest(requestId)) return;
+      if (!resp) throw new Error("No response from background script. Check your extension settings or reload the extension.");
+      if (resp.type === "TORRENTIO_ERROR") throw new Error(resp.message || "Could not fetch streams.");
+      if (resp.type !== "TORRENTIO_RESULT" || !Array.isArray(resp.streams)) throw new Error("Invalid stream response from background script.");
+
+      if (resp.streams.length === 0) {
+        currentStreams = [];
+        await loadPlayerPref(requestId);
+        if (isActiveRequest(requestId)) renderStreams();
+        return;
+      }
+
+      setModalBody(`<div class="torbox-loading"><div class="torbox-spinner"></div><p>Checking TorBox cache for ${resp.streams.length} streams...</p></div>`);
+      const cacheResp = await browser.runtime.sendMessage({
+        type: "CHECK_CACHE",
+        hashes: resp.streams.map(s => s.info_hash),
+        streams: resp.streams,
+      });
+      if (!isActiveRequest(requestId)) return;
+      if (cacheResp && cacheResp.type === "CACHE_ERROR") {
         setModalBody(`
-          <div class="torbox-error">⚠ No response from background script. Please check your extension settings or reload the extension.</div>
+          <div class="torbox-error">⚠ ${escapeHtml(cacheResp.message)}</div>
           <div style="text-align:center;margin-top:12px;">
-            <button class="torbox-btn torbox-btn-primary" id="torbox-retry-btn">Retry</button>
+            <button type="button" class="torbox-btn torbox-btn-primary" id="torbox-opts-btn">Open Settings</button>
+            <button type="button" class="torbox-btn torbox-btn-secondary" id="torbox-retry-btn">Retry</button>
           </div>
         `);
+        document.getElementById("torbox-opts-btn").addEventListener("click", () => browser.runtime.sendMessage({ type: "OPEN_OPTIONS" }));
         document.getElementById("torbox-retry-btn").addEventListener("click", fetchStreams);
         return;
       }
-      if (resp.type === "TORRENTIO_ERROR") {
-        setModalBody(`
-          <div class="torbox-error">⚠ ${escapeHtml(resp.message)}</div>
-          <div style="text-align:center;margin-top:12px;">
-            <button class="torbox-btn torbox-btn-primary" id="torbox-retry-btn">Retry</button>
-          </div>
-        `);
-        document.getElementById("torbox-retry-btn").addEventListener("click", fetchStreams);
-        return;
-      }
-      if (resp.type === "TORRENTIO_RESULT") {
-        if (!resp.streams || resp.streams.length === 0) {
-          setModalBody('<div class="torbox-error">No streams found for this title.</div>');
-          return;
-        }
-
-        setModalBody(`<div class="torbox-loading"><div class="torbox-spinner"></div><p>Checking TorBox cache for ${resp.streams.length} streams...</p></div>`);
-        
-        const cacheResp = await browser.runtime.sendMessage({
-          type: "CHECK_CACHE",
-          hashes: resp.streams.map(s => s.info_hash),
-          streams: resp.streams,
-        });
-
-        if (cacheResp.type === "CACHE_ERROR") {
-          setModalBody(`
-            <div class="torbox-error">⚠ ${escapeHtml(cacheResp.message)}</div>
-            <div style="text-align:center;margin-top:12px;">
-              <button class="torbox-btn torbox-btn-primary" id="torbox-opts-btn">Open Settings</button>
-            </div>
-          `);
-          document.getElementById("torbox-opts-btn").addEventListener("click", () => {
-            browser.runtime.sendMessage({ type: "OPEN_OPTIONS" });
-          });
-          return;
-        }
-
-        currentStreams = (cacheResp && Array.isArray(cacheResp.streams)) ? cacheResp.streams : [];
-        await loadPlayerPref();
-        renderStreams();
-      }
+      if (!cacheResp || !Array.isArray(cacheResp.streams)) throw new Error("No valid cache response from background script.");
+      currentStreams = cacheResp.streams;
+      await loadPlayerPref(requestId);
+      if (isActiveRequest(requestId)) renderStreams();
     } catch (e) {
-      setModalBody(`<div class="torbox-error">⚠ ${escapeHtml(e.message || "Communication error")}</div>`);
+      if (isActiveRequest(requestId)) renderRequestError(e.message || "Communication error", fetchStreams);
     }
   }
 
   async function pickStream(stream) {
+    if (!modalEl || !stream) return;
+    const requestId = ++modalRequest;
+    streamPending = true;
     setModalBody(`<div class="torbox-loading"><div class="torbox-spinner"></div><p>${stream.cached ? "✅ Cached — preparing stream..." : "❌ Not cached — downloading on TorBox..."}</p></div>`);
 
     const streamData = {
@@ -1164,13 +1251,15 @@
     };
 
     if (imdbInfo && imdbInfo.mediaType === "series") {
-      streamData.season = imdbInfo.season || 1;
+      streamData.season = imdbInfo.season ?? 1;
       streamData.episode = imdbInfo.episode || 1;
     }
 
     try {
       const resp = await browser.runtime.sendMessage({ type: "START_STREAM", data: streamData });
-      if (!resp) return;
+      if (!isActiveRequest(requestId)) return;
+      streamPending = false;
+      if (!resp) throw new Error("No response while preparing the stream.");
 
       if (resp.type === "STREAM_ERROR") {
         setModalBody(`
@@ -1185,16 +1274,21 @@
         return;
       }
 
-      if (resp.type === "STREAM_RESULT") {
+      if (resp.type === "STREAM_RESULT" && resp.data) {
         const res = resp.data;
         if (res.action === "pick_file") {
           renderFilePicker(res.torrent_id, res.files);
         } else {
           handleStreamSuccess(res);
         }
+      } else {
+        throw new Error("Invalid stream result from background script.");
       }
     } catch (e) {
-      setModalBody(`<div class="torbox-error">⚠ ${escapeHtml(e.message)}</div>`);
+      if (isActiveRequest(requestId)) {
+        streamPending = false;
+        renderRequestError(e.message || "Could not prepare stream.", () => pickStream(stream), renderStreams);
+      }
     }
   }
 
@@ -1209,7 +1303,7 @@
   function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
-    return div.innerHTML;
+    return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────
@@ -1229,11 +1323,23 @@
     new MutationObserver(() => {
       if (location.href !== lastUrl) {
         lastUrl = location.href;
+        closeModal();
+        document.getElementById("torbox-play-btn")?.parentElement.remove();
         if (window.location.hostname.includes("themoviedb.org")) {
           initTmdb();
         } else {
           imdbInfo = extractImdbInfo();
-          if (imdbInfo) setTimeout(injectButton, 500);
+          if (imdbInfo) {
+            browser.runtime.sendMessage({ type: "PAGE_INFO", data: imdbInfo });
+            injectButton();
+          }
+        }
+      } else if (!document.getElementById("torbox-play-btn")) {
+        // Host pages may render their action bar late or replace it after hydration.
+        if (window.location.hostname.includes("themoviedb.org")) {
+          if (extractTmdbInfo()) injectTmdbButton();
+        } else if (extractImdbInfo()) {
+          injectButton();
         }
       }
     }).observe(document.body, { childList: true, subtree: true });

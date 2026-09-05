@@ -7,6 +7,7 @@ import time
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+from urllib.parse import urlencode
 
 import requests
 
@@ -113,9 +114,9 @@ class TorBoxClient:
                 }, timeout=10)
             except requests.HTTPError as e:
                 status = e.response.status_code if e.response is not None else 0
-                if status == 403:
+                if status in (401, 403):
                     raise ValueError(
-                        "TorBox returned 403 Forbidden on cache check. "
+                        f"TorBox returned {status} on cache check. "
                         "Your API key may be invalid or expired."
                     )
                 # For other HTTP errors, mark batch as uncached
@@ -162,7 +163,7 @@ class TorBoxClient:
             torrent_data = data.get("data", {})
             # The response may contain torrent_id directly or in a nested structure
             if isinstance(torrent_data, dict):
-                return torrent_data.get("torrent_id") or torrent_data.get("id")
+                return torrent_data.get("torrent_id", torrent_data.get("id"))
             return torrent_data
         else:
             error = data.get("error", "UNKNOWN")
@@ -178,7 +179,7 @@ class TorBoxClient:
         Returns parsed TorrentInfo objects with file listings.
         """
         params = {"bypass_cache": "true"}
-        if torrent_id:
+        if torrent_id is not None:
             params["id"] = torrent_id
 
         data = self._get("torrents/mylist", params=params, timeout=10)
@@ -242,13 +243,9 @@ class TorBoxClient:
         Otherwise calls the API to get a direct CDN link.
         """
         if use_permalink:
-            return (
-                f"{BASE_URL}/torrents/requestdl"
-                f"?token={self.api_key}"
-                f"&torrent_id={torrent_id}"
-                f"&file_id={file_id}"
-                f"&redirect=true"
-            )
+            query = urlencode({"token": self.api_key, "torrent_id": torrent_id,
+                               "file_id": file_id, "redirect": "true"})
+            return f"{BASE_URL}/torrents/requestdl?{query}"
 
         data = self._get("torrents/requestdl", params={
             "token": self.api_key,

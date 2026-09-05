@@ -80,9 +80,11 @@ def _parse_quality(text: str) -> str:
 
 def _parse_seeders(text: str) -> Optional[int]:
     """Extract seeder count from title text."""
-    match = re.search(r"[👤S]\s*(\d+)", text)
+    # The bare ``S`` marker is separated from its count. Requiring whitespace
+    # avoids treating the ``S00`` in a season/episode identifier as seeders.
+    match = re.search(r"👤\s*(\d+)|\bS\s+(\d+)", text)
     if match:
-        return int(match.group(1))
+        return int(match.group(1) or match.group(2))
     match = re.search(r"(\d+)\s*(?:seeds?|seeders?)", text, re.IGNORECASE)
     if match:
         return int(match.group(1))
@@ -164,4 +166,4 @@ class TorrentioClient:
         Get torrent streams for a TV series episode.
         imdb_id: e.g. 'tt0903747'
         """
-        return self._fetch_streams(f"stream/series/{imdb_id}/{season}/{episode}.json")
+        return self._fetch_streams(f"stream/series/{imdb_id}:{season}:{episode}.json")

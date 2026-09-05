@@ -55,8 +55,8 @@ def parse_imdb_input(raw: str) -> str:
 def parse_episode(raw: str) -> tuple[int, int] | None:
     """Parse season/episode from 's01e01' or '1 1' format."""
     # s01e01 format
-    match = re.match(r"s(\d+)e(\d+)", raw.lower())
-    if match:
+    match = re.fullmatch(r"s(\d+)e(\d+)", raw.lower())
+    if match and int(match.group(2)) > 0:
         return int(match.group(1)), int(match.group(2))
     return None
 
@@ -121,7 +121,7 @@ def pick_file(files: list[TorrentFile], episode_hint: str = "") -> TorrentFile |
     if episode_hint:
         for f in files:
             name_lower = f.name.lower()
-            if episode_hint.lower() in name_lower:
+            if re.search(re.escape(episode_hint.lower()) + r"(?!\d)", name_lower) and Path(f.name).suffix.lower() in (".mkv", ".mp4", ".avi", ".webm", ".mov", ".m4v", ".ts", ".m2ts"):
                 print(f"  📄 Auto-selected: {f.name} ({f.size_human})")
                 return f
 
@@ -143,7 +143,9 @@ def pick_file(files: list[TorrentFile], episode_hint: str = "") -> TorrentFile |
             idx = int(choice) - 1
             if 0 <= idx < len(files):
                 return files[idx]
-        except (ValueError, EOFError):
+        except EOFError:
+            return None
+        except ValueError:
             pass
         print(colored("  Invalid choice, try again.", C.RED))
 
@@ -258,7 +260,9 @@ def main():
                 if 0 <= idx < len(sorted_streams):
                     chosen = sorted_streams[idx]
                     break
-            except (ValueError, EOFError):
+            except EOFError:
+                sys.exit(0)
+            except ValueError:
                 pass
             print(colored("  Invalid choice.", C.RED))
 

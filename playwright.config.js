@@ -2,34 +2,36 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: ['**/online/**', '**/live/**'],
   timeout: 30000,
-  expect: {
-    timeout: 10000,
-  },
+  expect: { timeout: 7000 },
+  forbidOnly: !!process.env.CI,
   fullyParallel: false,
-  retries: process.env.CI ? 2 : 0,
-  workers: 1,
-  reporter: [['html', { open: 'never' }], ['list']],
+  // A retry must not turn an intermittent regression into a green quality gate.
+  retries: 0,
+  workers: process.env.CI ? 2 : 1,
+  reporter: [['html', { open: 'never' }], ['list'], ['junit', { outputFile: 'test-results/browser-results.xml' }]],
   use: {
-    trace: 'on-first-retry',
+    trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
+    headless: true,
   },
   projects: [
     {
-      name: 'firefox-extension',
-      testMatch: /.*firefox.*/,
-      use: {
-        ...devices['Desktop Firefox'],
-        headless: true,
-      },
+      name: 'chromium-dom',
+      testMatch: /mock\/(ui\.|runtime\.).*\.spec\.js/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox-dom',
+      testMatch: /mock\/(ui\.|runtime\.).*\.spec\.js/,
+      use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'chromium-extension',
-      testMatch: /.*chromium.*/,
-      use: {
-        ...devices['Desktop Chrome'],
-        headless: true,
-      },
+      testMatch: /extension\/.*\.spec\.js/,
+      use: { ...devices['Desktop Chrome'], channel: 'chromium' },
     },
   ],
 });

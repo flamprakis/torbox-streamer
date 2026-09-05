@@ -62,6 +62,7 @@ class TestCLIE2E(unittest.TestCase):
     @patch("cli.TorrentioClient")
     @patch("cli.load_config")
     @patch("cli.get_api_key")
+    @unittest.skipIf(sys.platform == "win32", "Real POSIX player fixture; portable argv contracts tested separately")
     def test_cli_movie_workflow_e2e(self, mock_get_api_key, mock_load_config, mock_torrentio_cls, mock_torbox_cls):
         """Verifies full movie streaming workflow: Torrentio -> TorBox -> mpv launcher."""
         mock_get_api_key.return_value = "mock_torbox_api_key"
@@ -120,6 +121,7 @@ class TestCLIE2E(unittest.TestCase):
         self.assertIn("--force-window=yes", arg_line)
         self.assertIn("https://cdn.torbox.app/download/42/1/Shawshank.mkv", arg_line)
 
+    @unittest.skipIf(sys.platform == "win32", "Real POSIX player fixture; portable argv contracts tested separately")
     def test_launch_mpv_headers(self):
         """Verifies CLI launch_mpv function formats custom headers into --http-header-fields."""
         log_file = tempfile.NamedTemporaryFile(delete=False).name

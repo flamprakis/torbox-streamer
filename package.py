@@ -10,6 +10,7 @@ Bundles 3 release artifacts in build/:
 import json
 import os
 import shutil
+import sys
 import zipfile
 from pathlib import Path
 
@@ -38,9 +39,11 @@ def generate_chrome_manifest_v3(v2_manifest):
     # Permissions split into permissions and host_permissions
     if "permissions" in v3:
         permissions = []
-        host_permissions = ["<all_urls>"]
+        host_permissions = []
         for p in v3["permissions"]:
-            if not ("://" in p or p == "<all_urls>"):
+            if "://" in p or p == "<all_urls>":
+                host_permissions.append(p)
+            else:
                 permissions.append(p)
         v3["permissions"] = permissions
         v3["host_permissions"] = host_permissions
@@ -64,6 +67,26 @@ def generate_chrome_manifest_v3(v2_manifest):
     return v3
 
 
+def validate_manifest(manifest, extension_dir=EXTENSION_DIR):
+    """Fail before producing a release whose entry points or dependencies are missing."""
+    if manifest.get("manifest_version") != 2 or not manifest.get("version"):
+        raise ValueError("Source manifest must be Manifest V2 and specify a version")
+    paths = list(manifest.get("background", {}).get("scripts", []))
+    if not paths or paths[-1] != "background.js":
+        raise ValueError("background.js must be the final background script")
+    paths.extend(manifest.get("icons", {}).values())
+    paths.extend(manifest.get("browser_action", {}).get("default_icon", {}).values())
+    paths.append(manifest.get("options_ui", {}).get("page", ""))
+    paths.extend(manifest.get("web_accessible_resources", []))
+    for script in manifest.get("content_scripts", []):
+        paths.extend(script.get("js", []))
+        paths.extend(script.get("css", []))
+    for path in paths:
+        target = (extension_dir / path).resolve()
+        if not path or not target.is_relative_to(extension_dir.resolve()) or not target.is_file():
+            raise ValueError(f"Missing or invalid manifest resource: {path}")
+
+
 def package():
     if not MANIFEST_PATH.exists():
         print(f"❌ Manifest not found at: {MANIFEST_PATH}")
@@ -72,7 +95,23 @@ def package():
     with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
         manifest_v2 = json.load(f)
 
-    version = manifest_v2.get("version", "2.0.2")
+    validate_manifest(manifest_v2)
+    with open(ROOT_DIR / "package.json", encoding="utf-8") as package_file:
+        package_version = json.load(package_file)["version"]
+    version = manifest_v2["version"]
+    if version != package_version:
+        raise ValueError("extension/manifest.json and package.json versions must match")
+    installer_files = [
+        HELPERS_DIR / "install.sh",
+        HELPERS_DIR / "install.bat",
+        HELPERS_DIR / "install.py",
+        HELPERS_DIR / "native_host.py",
+        ROOT_DIR / "INSTALL.md",
+        ROOT_DIR / "README.md",
+    ]
+    for file_path in installer_files:
+        if not file_path.is_file():
+            raise ValueError(f"Missing installer resource: {file_path}")
     BUILD_DIR.mkdir(exist_ok=True)
 
     exclude_extensions = {".DS_Store", ".git", ".pyc"}
@@ -84,8 +123,8 @@ def package():
 
     with zipfile.ZipFile(ff_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(EXTENSION_DIR):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
-            for file in files:
+            dirs[:] = sorted(d for d in dirs if d not in exclude_dirs)
+            for file in sorted(files):
                 if any(file.endswith(ext) for ext in exclude_extensions):
                     continue
                 file_path = Path(root) / file
@@ -103,20 +142,22 @@ def package():
 
     with zipfile.ZipFile(chrome_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, dirs, files in os.walk(EXTENSION_DIR):
-            dirs[:] = [d for d in dirs if d not in exclude_dirs]
-            for file in files:
+            dirs[:] = sorted(d for d in dirs if d not in exclude_dirs)
+            for file in sorted(files):
                 if any(file.endswith(ext) for ext in exclude_extensions):
                     continue
                 file_path = Path(root) / file
                 arcname = file_path.relative_to(EXTENSION_DIR)
-                if file == "manifest.json":
+                if arcname.as_posix() == "manifest.json":
                     # Write converted Manifest V3
                     zf.writestr(str(arcname), json.dumps(manifest_v3, indent=2))
-                elif file == "background.js":
+                elif arcname.as_posix() == "background.js":
                     # Prepend importScripts for Chrome MV3 service worker
                     with open(file_path, "r", encoding="utf-8") as bf:
                         content = bf.read()
-                    sw_content = "try { importScripts('torbox_api.js'); } catch (e) {}\n" + content
+                    dependencies = manifest_v2["background"]["scripts"][:-1]
+                    imports = ", ".join(json.dumps(script) for script in dependencies)
+                    sw_content = (f"importScripts({imports});\n" if dependencies else "") + content
                     zf.writestr(str(arcname), sw_content)
                 else:
                     zf.write(file_path, arcname)
@@ -137,20 +178,10 @@ def package():
     installer_zip_path = BUILD_DIR / f"torbox-native-host-installer-v{version}.zip"
     print(f"\n📦 [3/3] Packaging Native Host Installer v{version}...")
 
-    installer_files = [
-        HELPERS_DIR / "install.sh",
-        HELPERS_DIR / "install.bat",
-        HELPERS_DIR / "install.py",
-        HELPERS_DIR / "native_host.py",
-        ROOT_DIR / "INSTALL.md",
-        ROOT_DIR / "README.md",
-    ]
-
     with zipfile.ZipFile(installer_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for file_path in installer_files:
-            if file_path.exists():
-                zf.write(file_path, file_path.name)
-                print(f"  + {file_path.name}")
+            zf.write(file_path, file_path.name)
+            print(f"  + {file_path.name}")
 
     installer_size = installer_zip_path.stat().st_size / 1024
     print(f"   ✅ Native Host Installer Zip created: {installer_zip_path.name} ({installer_size:.1f} KB)")
@@ -160,4 +191,8 @@ def package():
 
 
 if __name__ == "__main__":
-    package()
+    try:
+        sys.exit(0 if package() else 1)
+    except (ValueError, KeyError, OSError, json.JSONDecodeError) as error:
+        print(f"Packaging failed: {error}", file=sys.stderr)
+        sys.exit(1)

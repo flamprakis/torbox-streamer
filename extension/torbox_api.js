@@ -108,16 +108,16 @@ async function torboxCheckCached(apiKey, hashes) {
           }
         }
       } else {
-        batch.forEach(h => { result[h] = false; });
+        throw new Error(data.detail || "TorBox could not check the cache. Please try again.");
       }
     } catch (e) {
-      if (e.status === 403) {
+      if (e.status === 401 || e.status === 403) {
         throw new Error(
-          "TorBox returned 403 Forbidden. Your API key may be invalid or expired."
+          "TorBox rejected your API key. It may be invalid or expired."
         );
       }
-      // Network/timeout error — mark batch as uncached, don't hang
-      batch.forEach(h => { result[h] = false; });
+      // A failed request does not establish that a torrent is uncached.
+      throw new Error(`TorBox cache check failed: ${e.message}`);
     }
   }
 
@@ -143,18 +143,16 @@ async function torboxCreateTorrent(apiKey, magnet) {
     if (data.success) {
       const torrentData = data.data || {};
       if (typeof torrentData === "object") {
-        return torrentData.torrent_id || torrentData.id || null;
+        return torrentData.torrent_id ?? torrentData.id ?? null;
       }
       return torrentData;
     } else {
       const error = data.error || "UNKNOWN";
       const detail = data.detail || "Unknown error";
-      console.warn(`TorBox error: ${error} - ${detail}`);
-      return null;
+      throw new Error(`TorBox error: ${error} - ${detail}`);
     }
   } catch (e) {
-    console.warn("createTorrent failed:", e);
-    return null;
+    throw new Error(`Could not add torrent: ${e.message}`);
   }
 }
 
@@ -207,19 +205,18 @@ function isReady(state) {
  */
 async function torboxGetTorrentList(apiKey, torrentId = null) {
   const params = { bypass_cache: "true" };
-  if (torrentId) params.id = torrentId;
+  if (torrentId != null) params.id = torrentId;
 
   try {
     const data = await torboxGet(apiKey, "torrents/mylist", params, 10000);
-    if (!data.success) return [];
+    if (!data.success) throw new Error(data.detail || "TorBox could not retrieve the torrent list.");
 
     let raw = data.data || [];
     if (!Array.isArray(raw)) raw = [raw];
 
     return raw.map(parseTorrent);
   } catch (e) {
-    console.warn("getTorrentList failed:", e);
-    return [];
+    throw new Error(`Could not retrieve torrent status: ${e.message}`);
   }
 }
 
@@ -233,12 +230,16 @@ async function torboxWaitForReady(apiKey, torrentId, { timeout = 120, pollInterv
 
   while (Date.now() - start < timeout * 1000) {
     const torrents = await torboxGetTorrentList(apiKey, torrentId);
-    if (torrents.length > 0) {
-      const t = torrents[0];
+    const t = torrents.find(item => String(item.id) === String(torrentId));
+    if (t) {
       if (isReady(t.state)) return t;
+      if (["failed", "error", "cancelled"].includes(t.state)) {
+        throw new Error(`Torrent download ${t.state}. Please choose another source.`);
+      }
       if (onProgress) onProgress(t);
     }
-    await new Promise(r => setTimeout(r, pollInterval * 1000));
+    const remaining = timeout * 1000 - (Date.now() - start);
+    if (remaining > 0) await new Promise(resolve => { setTimeout(resolve, Math.min(pollInterval * 1000, remaining)); });
   }
 
   return null; // timed out
@@ -251,7 +252,10 @@ async function torboxWaitForReady(apiKey, torrentId, { timeout = 120, pollInterv
  * Uses redirect=true so the URL is stable (doesn't expire).
  */
 function torboxGetDownloadUrl(apiKey, torrentId, fileId) {
-  if (fileId == null || fileId === "" || isNaN(fileId)) {
+  if (!apiKey || torrentId == null || String(torrentId).trim() === "" ||
+      !Number.isInteger(Number(torrentId)) || Number(torrentId) < 0 ||
+      fileId == null || String(fileId).trim() === "" ||
+      !Number.isInteger(Number(fileId)) || Number(fileId) < 0) {
     console.error("[TorBox Streamer] Invalid fileId provided to torboxGetDownloadUrl:", fileId);
     return null;
   }
@@ -287,6 +291,7 @@ async function torboxDeleteTorrent(apiKey, torrentId) {
 const VIDEO_EXTS = new Set([".mkv", ".mp4", ".avi", ".webm", ".mov", ".m4v", ".wmv", ".flv", ".ts", ".m2ts"]);
 const SKIP_EXTS = new Set([
   ".srt", ".sub", ".ass", ".ssa", ".idx", ".nfo", ".txt",
+  ".vtt",
   ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tbn",
   ".xml", ".html", ".htm", ".url", ".lnk",
 ]);
@@ -301,8 +306,8 @@ function isVideoFile(filename) {
   const ext = getFileExt(filename);
   if (SKIP_EXTS.has(ext)) return false;
   // Skip obvious non-video or sample/extra paths
-  const lower = filename.toLowerCase();
-  if (["subtitle", "subs/", "sample", "proof", "cover", "poster", "artwork", "featurette"].some(s => lower.includes(s))) return false;
+  const tokens = filename.toLowerCase().split(/[\s._/\\-]+/);
+  if (["subtitles", "subs", "sample", "samples", "proof", "cover", "poster", "artwork", "featurette", "featurettes"].some(s => tokens.includes(s))) return false;
   if (VIDEO_EXTS.has(ext)) return true;
   // No extension — might still be video
   if (!ext) return true;
@@ -317,19 +322,17 @@ function isBrowserPlayable(filename) {
  * Intelligently pick the right file from a torrent.
  * Strategy:
  *   1. If fileIdx points to a valid video file (>20MB, video ext), use it
- *   2. Match keywords from searchTitle against filenames inside torrent
- *   3. For series: match episode pattern in filename among video files
- *   4. Pick the largest video file (by size)
- *   5. If no video extension match, pick largest non-skip file
- *   6. Last resort: largest file overall
+ *   2. For series: match the requested episode or ask for a manual selection
+ *   3. For movies: match title keywords, then choose the largest video
  */
 function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
   if (!files || files.length === 0) return null;
 
   // 1. If fileIdx is provided, validate that it points to an actual video file (>20MB, video ext)
   if (fileIdx != null) {
-    const idxNum = parseInt(fileIdx);
-    const candidate = files.find(f => f.id === idxNum || f.id === idxNum + 1 || files.indexOf(f) === idxNum);
+    // Torrentio supplies a zero-based file index; TorBox file IDs need not match it.
+    const idxNum = Number(fileIdx);
+    const candidate = Number.isInteger(idxNum) && idxNum >= 0 ? files[idxNum] : null;
     if (candidate && isVideoFile(candidate.name) && candidate.size > 20_000_000) {
       return candidate;
     }
@@ -337,13 +340,14 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
 
   // Single file torrent
   if (files.length === 1) {
-    const ext = getFileExt(files[0].name);
-    if (SKIP_EXTS.has(ext)) return null;
-    return files[0];
+    return isVideoFile(files[0].name) ? files[0] : null;
   }
 
   // 2. Title-based keyword matching (crucial for movie/series packs like IMDb Top 250)
-  if (searchTitle && typeof searchTitle === "string") {
+  const hasEpisode = season != null && episode != null &&
+    Number.isInteger(Number(season)) && Number(season) >= 0 &&
+    Number.isInteger(Number(episode)) && Number(episode) > 0;
+  if (!hasEpisode && searchTitle && typeof searchTitle === "string") {
     const cleanTitle = searchTitle.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
     const stopWords = new Set(["1080p", "2160p", "720p", "480p", "bluray", "webrip", "web-dl", "remastered", "esubs", "x264", "x265", "hevc", "rarbg", "edition", "imdb", "top", "250"]);
     const keywords = cleanTitle.split(/\s+/).filter(k => k.length >= 3 && !stopWords.has(k));
@@ -372,7 +376,7 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
   }
 
   // 3. For series: try episode pattern matching among video files
-  if (season && episode) {
+  if (hasEpisode) {
     const s = parseInt(season);
     const e = parseInt(episode);
     const sp = String(s).padStart(2, "0");
@@ -385,8 +389,9 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
       new RegExp(`s${sp}[.\\s_-]?e${e}(?!\\d)`, "i"),          // s01e5
       new RegExp(`s${s}[.\\s_-]?e${e}(?!\\d)`, "i"),           // s1e5
       new RegExp(`s${sp}[.\\s_-]?ep${ep}(?!\\d)`, "i"),        // s01ep05
-      new RegExp(`${sp}x${ep}(?!\\d)`, "i"),                   // 01x05
-      new RegExp(`${s}x${ep}(?!\\d)`, "i"),                    // 1x05
+      new RegExp(`(?:^|[^\\d])${sp}x${ep}(?!\\d)`, "i"),     // 01x05
+      new RegExp(`(?:^|[^\\d])${s}x${ep}(?!\\d)`, "i"),      // 1x05
+      new RegExp(`(?:^|[^\\d])${s}x${e}(?!\\d)`, "i"),       // 1x5
       new RegExp(`season\\s*${sp}[\\s._/\\-]*episode\\s*${ep}(?!\\d)`, "i"), // season 01 episode 05
       new RegExp(`season\\s*${s}[\\s._/\\-]*episode\\s*${ep}(?!\\d)`, "i"),  // season 1 episode 05
       new RegExp(`season\\s*${s}[\\s._/\\-]*episode\\s*${e}(?!\\d)`, "i"),   // season 1 episode 5
@@ -396,9 +401,13 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
       for (const f of files) {
         if (rx.test(f.name) && isVideoFile(f.name)) return f;
       }
-      for (const f of files) {
-        if (rx.test(f.name) && f.size > 100_000_000) return f;
-      }
+    }
+
+    // A release can contain consecutive episodes, e.g. S01E05-E06.
+    const rangePattern = new RegExp(`s0*${s}[.\\s_-]?e(\\d+)[-–]e?(\\d+)(?!\\d)`, "i");
+    for (const f of files) {
+      const range = f.name.match(rangePattern);
+      if (range && isVideoFile(f.name) && e >= Number(range[1]) && e <= Number(range[2])) return f;
     }
 
     // Tier 2: Episode-only patterns (lower confidence — verify season context in path/name)
@@ -409,11 +418,12 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
       new RegExp(`(?:^|[\\s._/\\-])episode[\\s._]*${ep}(?!\\d)`, "i"), // episode 05, episode.05
       new RegExp(`\\b${ep}\\s*(?:of|/)\\s*\\d+`, "i"),            // 05 of 24, 05/24
       new RegExp(`(?:^|\\s|\\.|_|-)${ep}\\.(?:mkv|mp4|avi)`, "i"), // 05.mkv at boundary
+      new RegExp(`(?:^|[\\s/_-])${ep}(?=[\\s._-]|$)`, "i"), // Season 04/05 - Title; S02 - 05
     ];
 
     // Verify season context: the file path should reference the correct season
     const seasonCtx = [
-      new RegExp(`s${sp}|s${s}|season\\s*${sp}|season\\s*${s}`, "i"),
+      new RegExp(`(?:^|[^a-z0-9])(?:s|season\\s*)0*${s}(?!\\d)`, "i"),
     ];
 
     for (const rx of tier2Patterns) {
@@ -421,26 +431,20 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
         if (!rx.test(f.name) || !isVideoFile(f.name)) continue;
         // Accept if season context is found in the file path, or if there's no season info at all
         const hasSeasonRef = seasonCtx.some(sr => sr.test(f.name));
-        const hasAnySeasonRef = /s\d+|season/i.test(f.name);
+        const hasAnySeasonRef = /(?:^|[^a-z0-9])(?:s\d+|season\s*\d+)/i.test(f.name);
         if (hasSeasonRef || !hasAnySeasonRef) return f;
       }
     }
+    return null;
   }
 
   // 4. Pick the largest video file
-  const videoFiles = files.filter(f => isVideoFile(f.name) && f.size > 10_000_000);
+  const videoFiles = files.filter(f => isVideoFile(f.name));
   if (videoFiles.length > 0) {
     return videoFiles.reduce((a, b) => a.size > b.size ? a : b);
   }
 
-  // 5. Filter out known non-video/skip extensions, pick largest
-  const nonSkip = files.filter(f => !SKIP_EXTS.has(getFileExt(f.name)));
-  if (nonSkip.length > 0) {
-    return nonSkip.reduce((a, b) => a.size > b.size ? a : b);
-  }
-
-  // 6. Last resort: largest file overall
-  return files.reduce((a, b) => a.size > b.size ? a : b);
+  return null;
 }
 
 // ─── Subtitles Helper ────────────────────────────────────────────────────────
@@ -461,7 +465,7 @@ function parsePreferredLanguages(prefString, userBrowserLang = "en") {
     if (token === "browser") {
       if (userBrowserLang) result.add(userBrowserLang.slice(0, 2).toLowerCase());
     } else {
-      result.add(token.slice(0, 3));
+      result.add(token.split(/[-_]/)[0]);
     }
   }
 
@@ -470,34 +474,3 @@ function parsePreferredLanguages(prefString, userBrowserLang = "en") {
 
   return Array.from(result);
 }
-
-async function fetchSubtitles(imdbId, season = 1, episode = 1, mediaType = "movie", preferredLangs = ["en"]) {
-  if (!imdbId) return [];
-
-  const queryId = mediaType === "series" ? `${imdbId}:${season}:${episode}` : imdbId;
-  const url = `https://opensubtitles.strem.fun/subtitles/${mediaType}/${queryId}.json`;
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) return [];
-    const data = await response.json();
-    if (!data || !data.subtitles) return [];
-
-    const allowed = new Set(preferredLangs.map(l => l.toLowerCase()));
-
-    return data.subtitles
-      .filter(sub => {
-        const lang = (sub.lang || sub.id || "en").toLowerCase();
-        return allowed.has("all") || allowed.has(lang) || allowed.has(lang.slice(0, 2));
-      })
-      .map(sub => ({
-        id: sub.id || sub.url,
-        url: sub.url,
-        lang: sub.lang || "en",
-        label: sub.lang ? sub.lang.toUpperCase() : "English",
-      }));
-  } catch (e) {
-    return [];
-  }
-}
-

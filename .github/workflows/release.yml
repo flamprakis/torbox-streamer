@@ -1,93 +1,129 @@
-name: Build & Release Package
+name: Build and release
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*'
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHONUTF8: '1'
 
 jobs:
+  validate-tag:
+    name: Validate release version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Require the tag to match both package versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          tag = os.environ['RELEASE_TAG']
+          version = json.loads(Path('extension/manifest.json').read_text())['version']
+          package_version = json.loads(Path('package.json').read_text())['version']
+          if not re.fullmatch(r'v\d+\.\d+\.\d+', tag) or tag != f'v{version}' or version != package_version:
+              raise SystemExit('Release tag must be v<version> and match manifest.json and package.json')
+          PY
+
+  ci:
+    name: Run every release quality check
+    needs: validate-tag
+    uses: ./.github/workflows/test.yml
+
   build-binaries:
-    name: Build Standalone Native Host (${{ matrix.os }})
+    name: Build and test native host (${{ matrix.os }})
+    needs: ci
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
-            artifact_name: torbox-host.exe
-            binary_name: torbox-host.exe
-          - os: ubuntu-latest
-            artifact_name: torbox-host-linux
-            binary_name: torbox-host-linux
+            binary: torbox-host.exe
+          - os: ubuntu-24.04
+            binary: torbox-host-linux
           - os: macos-latest
-            artifact_name: torbox-host-macos
-            binary_name: torbox-host-macos
-
+            binary: torbox-host-macos
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          python-version: '3.11'
-
-      - name: Install PyInstaller
-        run: python -m pip install pyinstaller
-
-      - name: Build Standalone Binary
-        run: |
-          pyinstaller --onefile --name ${{ matrix.binary_name }} helpers/native_host.py
-
-      - name: Upload Binary Artifact
-        uses: actions/upload-artifact@v4
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/${{ matrix.binary_name }}
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: .github/requirements-build.txt
+      - run: python -m pip install -r .github/requirements-build.txt
+      - name: Build standalone host
+        env:
+          BINARY_NAME: ${{ matrix.binary }}
+        shell: bash
+        run: python -m PyInstaller --noconfirm --clean --onefile --name "$BINARY_NAME" helpers/native_host.py
+      - name: Run the IPC contract against the compiled binary
+        env:
+          TORBOX_NATIVE_HOST_BINARY: ${{ github.workspace }}/dist/${{ matrix.binary }}
+        run: python -m unittest discover -v -s tests/e2e -p "test_native_host_e2e.py"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-${{ matrix.binary }}
+          path: dist/${{ matrix.binary }}
+          if-no-files-found: error
+          retention-days: 14
 
   release:
-    name: Create GitHub Release
-    needs: build-binaries
-    runs-on: ubuntu-latest
+    name: Publish tested release artifacts
+    needs: [ci, build-binaries]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Download the exact browser packages tested by CI
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          python-version: '3.11'
-
-      - name: Build Extension Zip
-        run: python3 package.py
-
-      - name: Download Binary Artifacts
-        uses: actions/download-artifact@v4
+          name: extension-packages
+          path: release/
+      - name: Download the tested standalone native hosts
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
         with:
-          path: dist-release/
+          pattern: native-*
           merge-multiple: true
-
-      - name: Organize Release Files
-        run: |
-          cp dist-release/* build/
-          ls -la build/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: TorBox Streamer ${{ github.ref_name }}
-          files: |
-            build/torbox-streamer-*.zip
-            build/torbox-host.exe
-            build/torbox-host-linux
-            build/torbox-host-macos
-          draft: false
-          prerelease: false
-          generate_release_notes: true
+          path: release/
+      - name: Verify release completeness and produce checksums
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          root = Path('release')
+          tag = os.environ['RELEASE_TAG']
+          expected = {
+              f'torbox-streamer-firefox-{tag}.zip', f'torbox-streamer-chrome-{tag}.zip',
+              f'torbox-native-host-installer-{tag}.zip',
+              'torbox-host.exe', 'torbox-host-linux', 'torbox-host-macos',
+          }
+          if {p.name for p in root.iterdir()} != expected:
+              raise SystemExit('Missing or unexpected release artifacts')
+          lines = [f'{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n' for name in sorted(expected)]
+          (root / 'SHA256SUMS').write_text(''.join(lines))
+          PY
+      - name: Create a release only for the existing validated tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" release/* --verify-tag --title "TorBox Streamer $RELEASE_TAG" --generate-notes

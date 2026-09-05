@@ -35,7 +35,7 @@
   },
 
   "background": {
-    "scripts": ["torbox_api.js", "background.js"],
+    "scripts": ["torbox_api.js", "subtitles_api.js", "background.js"],
     "persistent": true
   },
 

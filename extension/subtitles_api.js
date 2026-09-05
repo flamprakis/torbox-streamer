@@ -114,33 +114,23 @@ function getLanguageLabel(code) {
   return LANG_MAP[cleanCode] || code.toUpperCase();
 }
 
-/**
- * Fetches subtitles from OpenSubtitles / Stremio Subtitles API.
- * @param {string} imdbId 
+/** Match ISO language aliases and the language names used in bundled filenames. */
 function filterSubtitlesByLanguage(subtitles, preferredLangs = ["en"]) {
   if (!Array.isArray(subtitles) || subtitles.length === 0) return [];
   if (!preferredLangs || preferredLangs.length === 0) return subtitles;
 
-  const normalize = (code) => (code || "").toLowerCase().slice(0, 3);
+  const normalize = (code) => String(code || "").trim().toLowerCase().split(/[-_]/)[0];
   const targetLangs = preferredLangs.map(normalize);
+  if (targetLangs.includes("all")) return subtitles;
+  const targetNames = new Set(targetLangs.map(code => LANG_MAP[code] || code));
 
   const matched = subtitles.filter(sub => {
     const lang = normalize(sub.lang || "");
     const cleanLabel = (sub.label || "").replace(/^torrent:\s*/i, "").toLowerCase();
-    const url = (sub.url || "").toLowerCase();
-
-    return targetLangs.some(target => 
-      lang === target ||
-      cleanLabel.includes(`.${target}.`) ||
-      cleanLabel.includes(`(${target})`) ||
-      cleanLabel.includes(`_${target}_`) ||
-      url.includes(`.${target}.`) ||
-      (target === "en" && (cleanLabel.includes("english") || lang === "eng")) ||
-      (target === "el" && (cleanLabel.includes("greek") || lang === "gre" || lang === "ell")) ||
-      (target === "es" && (cleanLabel.includes("spanish") || lang === "spa")) ||
-      (target === "fr" && (cleanLabel.includes("french") || lang === "fre" || lang === "fra")) ||
-      (target === "de" && (cleanLabel.includes("german") || lang === "ger" || lang === "deu"))
-    );
+    if (targetNames.has(LANG_MAP[lang] || lang)) return true;
+    const tokens = cleanLabel.split(/[^a-z]+/).filter(Boolean);
+    return tokens.some(token => targetNames.has(LANG_MAP[token] || token)) ||
+      [...targetNames].some(name => cleanLabel.includes(name.toLowerCase()));
   });
 
   return matched.length > 0 ? matched : subtitles.slice(0, 5);
@@ -158,19 +148,21 @@ function filterSubtitlesByLanguage(subtitles, preferredLangs = ["en"]) {
 async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", preferredLangs = ["en"]) {
   if (!imdbId) return [];
 
-  let endpoint = `https://opensubtitles-v3.strem.io/subtitles/movie/${imdbId}.json`;
-  if (mediaType === "series" && season && episode) {
-    endpoint = `https://opensubtitles-v3.strem.io/subtitles/series/${imdbId}:${season}:${episode}.json`;
+  let endpoint = `https://opensubtitles-v3.strem.io/subtitles/movie/${encodeURIComponent(imdbId)}.json`;
+  if (mediaType === "series" && season != null && episode != null) {
+    endpoint = `https://opensubtitles-v3.strem.io/subtitles/series/${encodeURIComponent(imdbId)}:${encodeURIComponent(season)}:${encodeURIComponent(episode)}.json`;
   }
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const resp = await fetch(endpoint);
+    const resp = await fetch(endpoint, { signal: controller.signal });
     if (!resp.ok) return [];
 
     const json = await resp.json();
     if (!json.subtitles || !Array.isArray(json.subtitles)) return [];
 
-    const subs = json.subtitles.map((sub, idx) => {
+    const subs = json.subtitles.filter(sub => sub && typeof sub.url === "string" && /^https?:\/\//i.test(sub.url)).map((sub, idx) => {
       const langCode = sub.lang || sub.id || "unk";
       const label = getLanguageLabel(langCode);
       return {
@@ -178,7 +170,7 @@ async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", pref
         lang: langCode,
         label: `${label}${sub.lang ? ` (${sub.lang})` : ""}`,
         url: sub.url,
-        format: sub.url && sub.url.endsWith(".vtt") ? "vtt" : "srt"
+        format: /\.vtt(?:[?#]|$)/i.test(sub.url) ? "vtt" : "srt"
       };
     });
 
@@ -186,6 +178,8 @@ async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", pref
   } catch (err) {
     console.warn("[TorBox Streamer] Subtitle fetch error:", err);
     return [];
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -229,7 +223,8 @@ function formatAssTimestamp(ts) {
   return `${h}:${m}:${s}.${ms}`;
 }
 
-const BUNDLED_SUB_EXTS = new Set([".srt", ".vtt", ".ass", ".ssa", ".sub"]);
+// .sub may contain binary VobSub or MicroDVD cues; neither is WebVTT-compatible.
+const BUNDLED_SUB_EXTS = new Set([".srt", ".vtt", ".ass", ".ssa"]);
 
 /**
  * Extracts bundled subtitle files (.srt, .vtt, .ass) from torrent files list.
@@ -239,19 +234,19 @@ const BUNDLED_SUB_EXTS = new Set([".srt", ".vtt", ".ass", ".ssa", ".sub"]);
  * @returns {Array<object>} List of subtitle track objects with TorBox download URLs
  */
 function extractBundledSubtitles(apiKey, torrentId, files, preferredLangs = ["en"]) {
-  if (!files || !Array.isArray(files) || !apiKey || !torrentId) return [];
+  if (!files || !Array.isArray(files) || !apiKey || torrentId == null || String(torrentId).trim() === "") return [];
   const subs = [];
 
   for (const f of files) {
-    const name = f.name || f.short_name || f.path || f.s3_path || f.filename || "";
+    const name = (f.name || f.short_name || f.path || f.s3_path || f.filename || "").replace(/\\/g, "/");
     const dot = name.lastIndexOf(".");
     const ext = dot >= 0 ? name.slice(dot).toLowerCase() : "";
 
     if (BUNDLED_SUB_EXTS.has(ext)) {
       const fileId = f.id != null ? f.id : (f.file_id != null ? f.file_id : null);
-      if (fileId == null) continue;
+      if (fileId == null || !Number.isInteger(Number(fileId)) || Number(fileId) < 0) continue;
 
-      const url = `${TORBOX_API}/torrents/requestdl?token=${encodeURIComponent(apiKey)}&torrent_id=${torrentId}&file_id=${fileId}&redirect=true`;
+      const url = `${TORBOX_API}/torrents/requestdl?token=${encodeURIComponent(apiKey)}&torrent_id=${encodeURIComponent(torrentId)}&file_id=${fileId}&redirect=true`;
       
       let cleanLabel = name.replace(/^[\s/]+/, "");
       const slashIdx = cleanLabel.lastIndexOf("/");
@@ -284,6 +279,7 @@ if (typeof module !== "undefined" && module.exports) {
     createVttBlobUrl,
     getLanguageLabel,
     fetchSubtitles,
+    filterSubtitlesByLanguage,
     LANG_MAP
   };
 }
