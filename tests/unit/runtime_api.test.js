@@ -90,13 +90,13 @@ describe('shipped subtitle API', () => {
       expect(api.filterSubtitlesByLanguage(tracks, [preferred])).toEqual([tracks[1]]);
     });
 
-  it('accepts all languages, bounded fallback, empty input and Windows filename aliases', () => {
+  it('supports explicit all, strict no-match/empty preferences and Windows filename aliases', () => {
     const { api } = runtime();
     const tracks = Array.from({ length: 9 }, (_, index) => ({ lang: 'jpn', label: `Japanese ${index}` }));
     expect(api.filterSubtitlesByLanguage(tracks, ['all'])).toHaveLength(9);
-    expect(api.filterSubtitlesByLanguage(tracks, ['en'])).toHaveLength(5);
+    expect(api.filterSubtitlesByLanguage(tracks, ['en'])).toHaveLength(0);
     expect(api.filterSubtitlesByLanguage(null, ['en'])).toEqual([]);
-    expect(api.filterSubtitlesByLanguage(tracks, [])).toHaveLength(9);
+    expect(api.filterSubtitlesByLanguage(tracks, [])).toHaveLength(0);
     const result = api.extractBundledSubtitles('key', 1, [
       { file_id: 2, path: 'Collection\\Subs\\film.deu.srt' },
       { id: 3, name: 'bad.sub' }, { id: 'bad', name: 'bad.srt' }, { name: 'missing-id.srt' },
@@ -115,11 +115,31 @@ describe('shipped subtitle API', () => {
 
   it('parses configured/browser languages and deduplicates region codes', () => {
     const { api } = runtime();
-    expect(api.parsePreferredLanguages('el, browser, pt-BR, el', 'el-GR')).toEqual(['el', 'pt', 'en']);
+    expect(api.parsePreferredLanguages('el, browser, pt-BR, el', 'el-GR')).toEqual(['el', 'pt']);
+    expect(api.parsePreferredLanguages('browser', 'fil-PH')).toEqual(['fil']);
     expect(api.parsePreferredLanguages(undefined, 'de-DE')).toEqual(['en', 'de']);
     expect(api.getLanguageLabel(' FRA ')).toBe('French');
     expect(api.getLanguageLabel('xyz')).toBe('XYZ');
     expect(api.getLanguageLabel('')).toBe('Unknown Language');
+  });
+
+  it('trusts declared languages over film titles and keeps all alias-matching files', () => {
+    const { api } = runtime();
+    const tracks = [
+      { lang: 'fre', label: 'OpenSubtitles: The.English.Patient.srt' },
+      { lang: 'und', label: 'Torrent: Stranger.Things.srt' },
+      { lang: 'eng', label: 'English full' }, { lang: 'en-US', label: 'English SDH' },
+      { lang: 'und', label: 'Torrent: Movie.eng.forced.srt' },
+    ];
+    expect(api.filterSubtitlesByLanguage(tracks, ['en', 'eng'])).toEqual(tracks.slice(2));
+  });
+
+  it('deduplicates by file identity, not language, even when IDs and labels collide', () => {
+    const { api } = runtime();
+    const track = { id: 'same', label: 'English', lang: 'eng', url: 'https://subs.test/one' };
+    const result = api.uniqueSubtitleChoices([null, { ...track, url: 42 }, track, track, { ...track, url: 'https://subs.test/two' }]);
+    expect(result).toHaveLength(2);
+    expect(new Set(result.map(sub => sub.label)).size).toBe(2);
   });
 
   it('uses the shipped provider, filters malformed entries and recognizes VTT query strings', async () => {
@@ -130,7 +150,7 @@ describe('shipped subtitle API', () => {
     ] })) });
     const tracks = await api.fetchSubtitles('tt123', 1, 2, 'movie', ['en']);
     expect(fetch.mock.calls[0][0]).toBe('https://opensubtitles-v3.strem.io/subtitles/movie/tt123.json');
-    expect(tracks).toEqual([{ id: 'en-1', lang: 'eng', label: 'English (eng)', url: 'https://subs.test/en.vtt?download=1', format: 'vtt' }]);
+    expect(tracks).toEqual([{ id: 'en-1', lang: 'eng', label: 'OpenSubtitles: English (eng) [en-1]', url: 'https://subs.test/en.vtt?download=1', format: 'vtt' }]);
     await api.fetchSubtitles('tt123', 0, 2, 'series', ['fr']);
     expect(fetch.mock.calls[1][0]).toBe('https://opensubtitles-v3.strem.io/subtitles/series/tt123:0:2.json');
   });
@@ -138,6 +158,22 @@ describe('shipped subtitle API', () => {
   it.each([json({}, 503), json({ subtitles: {} }), json({ subtitles: [] })])('handles unusable provider response %#', async response => {
     const { api } = runtime({ fetch: vi.fn(async () => response) });
     expect(await api.fetchSubtitles('tt1')).toEqual([]);
+  });
+
+  it('retains distinct same-language releases and identifies their filenames, FPS and source IDs', async () => {
+    const first = { id: '123', lang: 'eng', url: 'https://subs5.strem.io/file/123', subtitleFileName: 'Film.BluRay.srt', fpsMilli: 23976 };
+    const second = { ...first, id: '124', url: 'https://subs5.strem.io/file/124', subtitleFileName: 'Film.WEB-DL.srt' };
+    const { api } = runtime({ fetch: vi.fn(async () => json({ subtitles: [first, first, second] })) });
+    const subs = await api.fetchSubtitles('tt123', null, null, 'movie', ['en', 'eng']);
+    expect(subs).toHaveLength(2);
+    expect(subs[0].label).toContain('Film.BluRay.srt · 23.976 fps [123]');
+    expect(subs[1].label).toContain('Film.WEB-DL.srt');
+  });
+
+  it('reports provider outages to the player instead of treating them as no matches', async () => {
+    const { message } = runtime({ fetch: vi.fn(async () => json({}, 503)) });
+    expect(await message({ type: 'FETCH_SUBTITLES', imdbId: 'tt123', mediaType: 'movie', languages: ['en'] }))
+      .toEqual({ success: false, error: 'OpenSubtitles returned HTTP 503.' });
   });
 
   it('aborts an unresponsive provider and clears its timeout after normal responses', async () => {
@@ -389,7 +425,7 @@ describe('production background dispatch', () => {
     const playerUrl = new URL(browser.tabs.create.mock.calls[0][0].url);
     expect(Object.fromEntries(playerUrl.searchParams)).toMatchObject({ torrent_id: '23', imdb_id: 'tt123', media_type: 'series', season: '2', episode: '5' });
     expect(new URL(playerUrl.searchParams.get('url')).searchParams.get('file_id')).toBe('42');
-    expect(stored.player_bundled_subtitles.map(sub => sub.label)).toEqual(['Torrent: English.srt', 'Torrent: Spanish.vtt']);
+    expect(stored.player_bundled_subtitles.map(sub => sub.label)).toEqual(['Torrent: Spanish.vtt']);
     expect(stored.last_stream_metadata).toMatchObject({ torrent_id: 23, imdb_id: 'tt123' });
     expect(browser.tabs.sendMessage).toHaveBeenCalledWith(5, expect.objectContaining({ type: 'STREAM_PROGRESS' }));
     expect(fetch.mock.calls.some(([url]) => url.includes('/series/tt123:2:5.json'))).toBe(true);
@@ -417,7 +453,7 @@ describe('production background dispatch', () => {
     const result = await message({ type: 'START_STREAM', data: { hash: 'h', media_type: 'series', season: 2, episode: 5, imdb_id: 'tt123' } });
     expect(result.data.method).toBe('mpv');
     expect(nativePort.postMessage.mock.calls[0][0]).toMatchObject({ player: 'mpv', custom_path: '/custom/mpv', subtitles: expect.arrayContaining(['https://subs.test/es.srt']) });
-    expect(nativePort.postMessage.mock.calls[0][0].subtitles).toHaveLength(3);
+    expect(nativePort.postMessage.mock.calls[0][0].subtitles).toHaveLength(2);
     expect(browser.tabs.create).not.toHaveBeenCalled();
   });
 

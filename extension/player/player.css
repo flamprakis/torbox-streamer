@@ -36,6 +36,27 @@ video {
 }
 
 /* Subtitle Styling */
+.subtitle-overlay {
+  position: absolute;
+  bottom: max(10%, calc(var(--subtitle-controls-height, 140px) + 16px));
+  left: 5%;
+  right: 5%;
+  z-index: 9;
+  pointer-events: none;
+  text-align: center;
+  font-size: clamp(18px, 2.5vw, 32px);
+  line-height: 1.35;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  text-shadow: 0 2px 4px #000;
+}
+
+.subtitle-overlay span {
+  background: rgba(0, 0, 0, .8);
+  box-decoration-break: clone;
+  padding: 2px 6px;
+}
+
 video::cue {
   background: rgba(0, 0, 0, 0.85);
   color: #ffffff;

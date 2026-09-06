@@ -24,6 +24,7 @@ const LANG_MAP = {
   rus: "Russian",
   ru: "Russian",
   nld: "Dutch",
+  dut: "Dutch",
   nl: "Dutch",
   pol: "Polish",
   pl: "Polish",
@@ -32,6 +33,7 @@ const LANG_MAP = {
   ara: "Arabic",
   ar: "Arabic",
   zho: "Chinese",
+  chi: "Chinese",
   zh: "Chinese",
   jpn: "Japanese",
   ja: "Japanese",
@@ -48,8 +50,10 @@ const LANG_MAP = {
   hun: "Hungarian",
   hu: "Hungarian",
   ces: "Czech",
+  cze: "Czech",
   cs: "Czech",
   ron: "Romanian",
+  rum: "Romanian",
   ro: "Romanian",
   bul: "Bulgarian",
   bg: "Bulgarian",
@@ -117,7 +121,7 @@ function getLanguageLabel(code) {
 /** Match ISO language aliases and the language names used in bundled filenames. */
 function filterSubtitlesByLanguage(subtitles, preferredLangs = ["en"]) {
   if (!Array.isArray(subtitles) || subtitles.length === 0) return [];
-  if (!preferredLangs || preferredLangs.length === 0) return subtitles;
+  if (!preferredLangs || preferredLangs.length === 0) return [];
 
   const normalize = (code) => String(code || "").trim().toLowerCase().split(/[-_]/)[0];
   const targetLangs = preferredLangs.map(normalize);
@@ -127,13 +131,16 @@ function filterSubtitlesByLanguage(subtitles, preferredLangs = ["en"]) {
   const matched = subtitles.filter(sub => {
     const lang = normalize(sub.lang || "");
     const cleanLabel = (sub.label || "").replace(/^torrent:\s*/i, "").toLowerCase();
-    if (targetNames.has(LANG_MAP[lang] || lang)) return true;
+    // A declared ISO language wins over release names (e.g. English.Patient).
+    if (/^[a-z]{2,3}$/.test(lang) && !["und", "unk"].includes(lang)) {
+      return targetNames.has(LANG_MAP[lang] || lang);
+    }
     const tokens = cleanLabel.split(/[^a-z]+/).filter(Boolean);
     return tokens.some(token => targetNames.has(LANG_MAP[token] || token)) ||
-      [...targetNames].some(name => cleanLabel.includes(name.toLowerCase()));
+      [...targetNames].some(name => tokens.includes(name.toLowerCase()));
   });
 
-  return matched.length > 0 ? matched : subtitles.slice(0, 5);
+  return matched;
 }
 
 /**
@@ -145,7 +152,7 @@ function filterSubtitlesByLanguage(subtitles, preferredLangs = ["en"]) {
  * @param {string[]} [preferredLangs]
  * @returns {Promise<Array<{id: string, lang: string, label: string, url: string, format: string}>>}
  */
-async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", preferredLangs = ["en"]) {
+async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", preferredLangs = ["en"], { reportErrors = false } = {}) {
   if (!imdbId) return [];
 
   let endpoint = `https://opensubtitles-v3.strem.io/subtitles/movie/${encodeURIComponent(imdbId)}.json`;
@@ -157,30 +164,50 @@ async function fetchSubtitles(imdbId, season, episode, mediaType = "movie", pref
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
     const resp = await fetch(endpoint, { signal: controller.signal });
-    if (!resp.ok) return [];
+    if (!resp.ok) throw new Error(`OpenSubtitles returned HTTP ${resp.status}.`);
 
     const json = await resp.json();
-    if (!json.subtitles || !Array.isArray(json.subtitles)) return [];
+    if (!Array.isArray(json.subtitles)) throw new Error("OpenSubtitles returned an invalid subtitle list.");
 
     const subs = json.subtitles.filter(sub => sub && typeof sub.url === "string" && /^https?:\/\//i.test(sub.url)).map((sub, idx) => {
-      const langCode = sub.lang || sub.id || "unk";
+      const langCode = typeof sub.lang === "string" ? sub.lang : "und";
       const label = getLanguageLabel(langCode);
+      const release = sub.subtitleFileName || sub.movieReleaseName || sub.release || "";
+      const fps = Number(sub.fpsMilli) / 1000;
       return {
         id: sub.id || `sub-${idx}`,
         lang: langCode,
-        label: `${label}${sub.lang ? ` (${sub.lang})` : ""}`,
+        label: `OpenSubtitles: ${label} (${langCode})${release ? ` — ${release}` : ""}${Number.isFinite(fps) && fps > 0 ? ` · ${fps} fps` : ""} [${sub.id || idx + 1}]`,
         url: sub.url,
         format: /\.vtt(?:[?#]|$)/i.test(sub.url) ? "vtt" : "srt"
       };
     });
 
-    return filterSubtitlesByLanguage(subs, preferredLangs);
+    return uniqueSubtitleChoices(filterSubtitlesByLanguage(subs, preferredLangs));
   } catch (err) {
+    if (reportErrors) throw new Error(err.name === "AbortError" ? "OpenSubtitles timed out. Try Reload Subtitles." : err.message);
     console.warn("[TorBox Streamer] Subtitle fetch error:", err);
     return [];
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Keep every distinct file, even for the same language. Identity is the URL,
+// never the language; duplicate display labels receive an unambiguous suffix.
+function uniqueSubtitleChoices(subtitles) {
+  const seen = new Set();
+  const choices = subtitles.filter(sub => {
+    const identity = sub?.textTrack || (typeof sub?.url === "string" ? sub.url : null);
+    if (!identity || seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+  const labels = new Map();
+  for (const sub of choices) labels.set(sub.label, (labels.get(sub.label) || 0) + 1);
+  return choices.map((sub, index) => ({ ...sub,
+    label: labels.get(sub.label) > 1 ? `${sub.label} [track ${index + 1}]` : sub.label,
+  }));
 }
 
 /**

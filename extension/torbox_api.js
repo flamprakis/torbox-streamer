@@ -452,7 +452,7 @@ function autoPickFile(files, fileIdx, season, episode, searchTitle = "") {
 function parsePreferredLanguages(prefString, userBrowserLang = "en") {
   const defaultLangs = ["en"];
   if (userBrowserLang) {
-    const shortLang = userBrowserLang.slice(0, 2).toLowerCase();
+    const shortLang = userBrowserLang.toLowerCase().split(/[-_]/)[0];
     if (!defaultLangs.includes(shortLang)) defaultLangs.push(shortLang);
   }
 
@@ -463,14 +463,11 @@ function parsePreferredLanguages(prefString, userBrowserLang = "en") {
 
   for (const token of tokens) {
     if (token === "browser") {
-      if (userBrowserLang) result.add(userBrowserLang.slice(0, 2).toLowerCase());
+      if (userBrowserLang) result.add(userBrowserLang.toLowerCase().split(/[-_]/)[0]);
     } else {
       result.add(token.split(/[-_]/)[0]);
     }
   }
-
-  // Ensure English is always included as requested
-  result.add("en");
 
   return Array.from(result);
 }

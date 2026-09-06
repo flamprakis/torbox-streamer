@@ -70,8 +70,12 @@ For developers who clone the repository and want to run directly from source:
 git clone https://github.com/flamprakis/torbox-streamer.git
 cd torbox-streamer
 
-# Run the Vitest source/contract unit suite (80 tests), the offline Playwright DOM/extension E2E suite (69 tests), and the Python native-host/packaging contract suite (29 tests)
+# Run source coverage, offline Chromium/Firefox tests, and native-host/package contracts
 npm test
+
+# Optional: check the live public OpenSubtitles listing and subtitle download (no login)
+npm run build
+npx playwright test --config playwright.online.config.js subtitles.online.spec.js
 
 # Build release zip assets in build/
 python3 package.py
@@ -87,6 +91,14 @@ python3 package.py
 | **MPV** 🍿 | All formats (`.mkv`, `.avi`, HDR, etc.) | MPV Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
 | **VLC** 🟧 | All formats (`.mkv`, `.avi`, multi-audio) | VLC Media Player | Run `install.sh` (Linux/Mac) or `install.bat` (Windows). |
 | **Auto** ⚡ | Dynamic | Auto-selects | Uses Browser Tab for `.mp4` and MPV/VLC for `.mkv`. |
+
+### Subtitles in the browser player
+
+Settings accept comma-separated ISO language codes and `browser` (for example, `el, en, browser`). Only matching languages are listed; English is not added unless configured. Every distinct matching file is retained, even when several tracks share a language. Files without a recognizable language are not automatically included; an SRT/VTT file can still be dropped onto the player explicitly.
+
+Choices identify torrent files, browser-exposed embedded tracks, or public OpenSubtitles releases. Release filenames, frame rates (when supplied), and track identifiers distinguish alternatives. OpenSubtitles uses the public Stremio service without an account; failures are shown in the player and can be retried with **Reload Subtitles**. Different releases can have different timing, so choose the release matching your video.
+
+Custom controls render captions directly; enabling Chromium's native controls transfers caption rendering to the browser to avoid two simultaneous layers. Native track selections and Off synchronize with the extension selector. Embedded support is limited to text tracks exposed by the browser, not arbitrary MKV/bitmap subtitle extraction. Timing adjustment applies to external subtitle files; the custom caption layer renders plain text rather than authored ASS/WebVTT styling.
 
 ---
 
@@ -108,7 +120,7 @@ torbox-streamer/
 │   ├── install.py              # Cross-platform Python installer & CLI flags
 │   └── native_host.py          # Native messaging bridge source
 ├── tests/                      # Automated Test Framework
-│   ├── unit/                   # Vitest source/contract unit suite (80 tests)
+│   ├── unit/                   # Vitest source/contract unit suite with coverage gates
 │   └── e2e/                    # Playwright Firefox & Chromium E2E suite
 ├── cli/                        # Standalone Terminal CLI Tool
 ├── package.py                  # Dual release zip builder (Firefox MV2 & Chrome MV3)

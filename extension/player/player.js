@@ -110,6 +110,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnSubPlus = document.getElementById("btn-sub-plus");
   const btnReloadSubs = document.getElementById("btn-reload-subs");
   const subStatus = document.getElementById("sub-status");
+  const subtitleOverlay = document.getElementById("subtitle-overlay");
 
   // Modern Control Elements
   const topOverlay = document.getElementById("top-overlay");
@@ -171,6 +172,13 @@ document.addEventListener("DOMContentLoaded", async () => {
   let rawSubTexts = {};
   let currentDelay = 0;
   let activeTrackBlobUrl = null;
+  let selectedTextTrack = null;
+  let subtitleProviderError = "";
+  let preferredSubtitleLanguages = ["en"];
+  let subtitleListLoading = true;
+  const nativeTrackIds = new WeakMap();
+  const downloadedTrackChoices = new WeakMap();
+  let nextNativeTrackId = 0;
   let subtitleListRequest = 0;
   let subtitleLoadRequest = 0;
   let userSelectedSubtitle = false;
@@ -427,23 +435,135 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   function setSubtitleStatus(message) {
-    if (subStatus) subStatus.textContent = message;
+    if (subStatus) subStatus.textContent = [message, subtitleProviderError].filter(Boolean).join(" — ");
   }
 
   function clearSubtitleTrack() {
+    selectedTextTrack = null;
+    subtitleOverlay?.replaceChildren();
     if (activeTrackBlobUrl) {
       URL.revokeObjectURL(activeTrackBlobUrl);
       activeTrackBlobUrl = null;
     }
-    for (const track of video.textTracks) track.mode = "disabled";
-    video.querySelectorAll("track").forEach(track => track.remove());
+    for (const track of video.textTracks) {
+      if (["subtitles", "captions"].includes(track.kind)) track.mode = "disabled";
+    }
+    video.querySelectorAll("track[data-torbox-subtitle]").forEach(track => track.remove());
   }
 
+  function nativeSubtitleChoices() {
+    const managed = new Set([...video.querySelectorAll("track[data-torbox-subtitle]")].map(el => el.track));
+    const choices = [...video.textTracks].filter(track =>
+      ["subtitles", "captions"].includes(track.kind) && !managed.has(track)).map(track => {
+      if (!nativeTrackIds.has(track)) {
+        nativeTrackIds.set(track, ++nextNativeTrackId);
+        track.addEventListener("cuechange", renderSubtitleCues);
+      }
+      const id = nativeTrackIds.get(track);
+      return { id: `embedded-${id}`, textTrack: track, lang: track.language || "und",
+        label: `Embedded: ${track.label || getLanguageLabel(track.language)} (${track.language || "und"}) [track ${id}]` };
+    });
+    return filterSubtitlesByLanguage(choices, preferredSubtitleLanguages);
+  }
+
+  function populateSubtitleSelect(selected) {
+    subSelect.replaceChildren(new Option("Off", ""));
+    currentSubtitles.forEach((sub, index) => subSelect.add(new Option(sub.label, String(index))));
+    const index = currentSubtitles.findIndex(sub => selected &&
+      (selected.textTrack ? sub.textTrack === selected.textTrack : sub.url === selected.url));
+    subSelect.value = index >= 0 ? String(index) : "";
+    return index;
+  }
+
+  function refreshNativeSubtitles() {
+    if (subtitleListLoading) return;
+    const previous = subSelect.value === "" ? null : currentSubtitles[Number(subSelect.value)];
+    currentSubtitles = uniqueSubtitleChoices([...currentSubtitles.filter(sub => !sub.textTrack), ...nativeSubtitleChoices()]);
+    const index = populateSubtitleSelect(previous);
+    if (previous && index < 0) void loadSelectedSubtitle(-1);
+    else if (!previous && !userSelectedSubtitle && currentSubtitles.length) {
+      subSelect.value = "0";
+      void loadSelectedSubtitle(0, currentDelay);
+    }
+    syncSubtitleRendering();
+  }
+
+  function renderSubtitleCues() {
+    if (!subtitleOverlay) return;
+    subtitleOverlay.replaceChildren();
+    // Native controls own native caption rendering. Custom controls use a DOM
+    // layer because Chromium can suppress native captions without controls.
+    if (video.controls || document.pictureInPictureElement === video || !selectedTextTrack) return;
+    for (const cue of selectedTextTrack.activeCues || []) {
+      const line = document.createElement("div");
+      const caption = document.createElement("span");
+      // getCueAsHTML parses WebVTT markup without interpreting arbitrary HTML.
+      caption.textContent = cue.getCueAsHTML ? cue.getCueAsHTML().textContent : cue.text;
+      line.appendChild(caption);
+      subtitleOverlay.appendChild(line);
+    }
+  }
+
+  function syncSubtitleRendering() {
+    const native = video.controls || document.pictureInPictureElement === video;
+    for (const track of video.textTracks) {
+      if (!["subtitles", "captions"].includes(track.kind)) continue;
+      const mode = track === selectedTextTrack ? (native ? "showing" : "hidden") : "disabled";
+      if (track.mode !== mode) track.mode = mode;
+    }
+    renderSubtitleCues();
+    for (const button of [btnSubMinus, btnSubPlus]) {
+      if (button) {
+        button.disabled = !!selectedTextTrack && nativeTrackIds.has(selectedTextTrack);
+        button.title = button.disabled ? "Timing adjustment is available for external subtitle files only" : "Adjust subtitle timing";
+      }
+    }
+  }
+
+  const controlsObserver = new MutationObserver(syncSubtitleRendering);
+  controlsObserver.observe(video, { attributes: true, attributeFilter: ["controls"] });
+  const controlsSizeObserver = new ResizeObserver(() => {
+    subtitleOverlay?.style.setProperty("--subtitle-controls-height", `${bottomOverlay.offsetHeight}px`);
+  });
+  if (bottomOverlay) controlsSizeObserver.observe(bottomOverlay);
+  video.addEventListener("enterpictureinpicture", syncSubtitleRendering);
+  video.addEventListener("leavepictureinpicture", syncSubtitleRendering);
+  video.addEventListener("timeupdate", renderSubtitleCues);
+  video.addEventListener("seeked", renderSubtitleCues);
+  video.textTracks.addEventListener("addtrack", refreshNativeSubtitles);
+  video.textTracks.addEventListener("removetrack", refreshNativeSubtitles);
+  video.textTracks.addEventListener("change", () => {
+    if (video.controls || document.pictureInPictureElement === video) {
+      const showing = [...video.textTracks].find(track =>
+        ["subtitles", "captions"].includes(track.kind) && track.mode === "showing" && track !== selectedTextTrack);
+      if (showing) {
+        const downloaded = downloadedTrackChoices.get(showing);
+        const index = currentSubtitles.findIndex(sub => sub.textTrack === showing ||
+          (downloaded && sub.url === downloaded.url));
+        if (index >= 0) {
+          userSelectedSubtitle = true;
+          subSelect.value = String(index);
+          void loadSelectedSubtitle(index, currentDelay);
+          return;
+        }
+      }
+      if (!showing && selectedTextTrack?.mode === "disabled") {
+        selectedTextTrack = null;
+        subSelect.value = "";
+        userSelectedSubtitle = true;
+        setSubtitleStatus("Subtitles off");
+      }
+    }
+    syncSubtitleRendering();
+  });
+
   async function initSubtitles(reload = false) {
+    subtitleListLoading = true;
+    subtitleProviderError = "";
     const request = ++subtitleListRequest;
     ++subtitleLoadRequest;
-    const previousUrl = subSelect && subSelect.value !== ""
-      ? currentSubtitles[Number(subSelect.value)]?.url : "";
+    const previous = subSelect && subSelect.value !== ""
+      ? currentSubtitles[Number(subSelect.value)] : null;
     clearSubtitleTrack();
     currentSubtitles = [];
     if (reload) rawSubTexts = {};
@@ -466,6 +586,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const effectiveSeason = season ?? lastMeta.season ?? 1;
       const effectiveEpisode = episode ?? lastMeta.episode ?? 1;
       const prefLangs = parsePreferredLanguages(stored.subtitle_languages || "en, browser", navigator.language);
+      preferredSubtitleLanguages = prefLangs;
       let bundled = sameTorrent && Array.isArray(stored.player_bundled_subtitles)
         ? filterSubtitlesByLanguage(stored.player_bundled_subtitles, prefLangs) : [];
 
@@ -482,27 +603,28 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         return bundled;
       };
+      const getExternal = async () => {
+        if (!effectiveImdbId) return [];
+        try {
+          const response = await browser.runtime.sendMessage({ type: "FETCH_SUBTITLES", imdbId: effectiveImdbId,
+            season: effectiveSeason, episode: effectiveEpisode, mediaType: effectiveMediaType, languages: prefLangs });
+          if (!response?.success) throw new Error(response?.error || "OpenSubtitles did not respond. Try Reload Subtitles.");
+          return response.subtitles;
+        } catch (error) {
+          if (request === subtitleListRequest) subtitleProviderError = `OpenSubtitles: ${error.message}`;
+          return [];
+        }
+      };
       const [bundledSubs, external] = await Promise.all([
         getBundled(),
-        effectiveImdbId ? fetchSubtitles(effectiveImdbId, effectiveSeason, effectiveEpisode, effectiveMediaType, prefLangs) : [],
+        getExternal(),
       ]);
       if (request !== subtitleListRequest) return;
 
-      const seenUrls = new Set();
-      currentSubtitles = [...bundledSubs, ...external].filter(sub => {
-        if (!sub || typeof sub.url !== "string" || seenUrls.has(sub.url)) return false;
-        seenUrls.add(sub.url);
-        return true;
-      });
+      currentSubtitles = uniqueSubtitleChoices([...bundledSubs, ...external, ...nativeSubtitleChoices()]);
       if (subSelect) {
-        currentSubtitles.forEach((sub, index) => {
-          const option = document.createElement("option");
-          option.value = index;
-          option.textContent = sub.label;
-          subSelect.appendChild(option);
-        });
+        const previousIndex = populateSubtitleSelect(previous);
         subSelect.disabled = false;
-        const previousIndex = currentSubtitles.findIndex(sub => sub.url === previousUrl);
         const nextIndex = userSelectedSubtitle ? previousIndex : (currentSubtitles.length ? 0 : -1);
         subSelect.value = nextIndex >= 0 ? String(nextIndex) : "";
         void loadSelectedSubtitle(nextIndex, currentDelay);
@@ -512,6 +634,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       console.warn("[TorBox Streamer] Subtitle initialization failed:", error);
     } finally {
       if (request === subtitleListRequest) {
+        subtitleListLoading = false;
         if (subSelect) subSelect.disabled = false;
         if (btnReloadSubs) btnReloadSubs.disabled = false;
       }
@@ -525,6 +648,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   async function loadSelectedSubtitle(index, delay = 0) {
     const request = ++subtitleLoadRequest;
     clearSubtitleTrack();
+    syncSubtitleRendering();
 
     if (index === "" || index < 0 || !currentSubtitles[index]) {
       setSubtitleStatus(currentSubtitles.length ? "Subtitles off" : "No subtitles found. Try Reload Subtitles or drop an SRT/VTT file.");
@@ -532,6 +656,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const sub = currentSubtitles[index];
+    if (sub.textTrack) {
+      selectedTextTrack = sub.textTrack;
+      syncSubtitleRendering();
+      setSubtitleStatus(sub.label);
+      return;
+    }
     setSubtitleStatus(`Loading ${sub.label}…`);
     try {
       if (!Object.hasOwn(rawSubTexts, sub.url)) {
@@ -568,13 +698,22 @@ document.addEventListener("DOMContentLoaded", async () => {
       const blob = new Blob([vttContent], { type: "text/vtt;charset=utf-8" });
       activeTrackBlobUrl = URL.createObjectURL(blob);
       const track = document.createElement("track");
+      track.dataset.torboxSubtitle = "true";
       track.kind = "subtitles";
       track.label = sub.label;
       track.srclang = /^[a-z]{2,3}(?:-[a-z0-9]+)*$/i.test(sub.lang) ? sub.lang : "und";
       track.src = activeTrackBlobUrl;
-      track.default = true;
+      track.addEventListener("cuechange", renderSubtitleCues);
+      track.addEventListener("load", () => {
+        if (request === subtitleLoadRequest) syncSubtitleRendering();
+      });
+      track.addEventListener("error", () => {
+        if (request === subtitleLoadRequest) setSubtitleStatus("Subtitle could not be decoded. Choose another track.");
+      });
+      selectedTextTrack = track.track;
+      downloadedTrackChoices.set(selectedTextTrack, sub);
       video.appendChild(track);
-      track.track.mode = "showing";
+      syncSubtitleRendering();
       setSubtitleStatus(`${sub.label}${delay ? ` (${delay > 0 ? "+" : ""}${delay.toFixed(1)}s)` : ""}`);
     } catch (error) {
       if (request === subtitleLoadRequest) setSubtitleStatus("Subtitle could not be loaded. Choose another subtitle or try Reload Subtitles.");
@@ -712,6 +851,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Bind controls before doing network I/O, including when providers are slow.
   void initSubtitles();
   window.addEventListener("pagehide", () => {
+    controlsObserver.disconnect();
+    controlsSizeObserver.disconnect();
     ++subtitleListRequest;
     ++subtitleLoadRequest;
     clearSubtitleTrack();

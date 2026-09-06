@@ -5,7 +5,7 @@ const sharedScriptGlobals = Object.fromEntries([
   'torboxGetTorrentList', 'torboxDeleteTorrent', 'autoPickFile', 'isBrowserPlayable',
   'parsePreferredLanguages', 'extractBundledSubtitles', 'fetchSubtitles',
   'parseSrtToVtt', 'parseAssToVtt', 'createVttBlobUrl', 'getLanguageLabel',
-  'filterSubtitlesByLanguage', 'getFileExt', 'humanSize', 'getConfig', 'TORBOX_API',
+  'filterSubtitlesByLanguage', 'uniqueSubtitleChoices', 'getFileExt', 'humanSize', 'getConfig', 'TORBOX_API',
 ].map(name => [name, 'readonly']));
 
 export default [

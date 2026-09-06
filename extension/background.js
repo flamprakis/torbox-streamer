@@ -505,6 +505,11 @@ browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         .then(text => ({ type: "SUBTITLE_TEXT_RESULT", success: true, text }))
         .catch(e => ({ type: "SUBTITLE_TEXT_RESULT", success: false, error: e.message }));
 
+    case "FETCH_SUBTITLES":
+      return fetchSubtitles(msg.imdbId, msg.season, msg.episode, msg.mediaType, msg.languages, { reportErrors: true })
+        .then(subtitles => ({ success: true, subtitles }))
+        .catch(error => ({ success: false, error: error.message }));
+
     case "OPEN_OPTIONS":
       browser.runtime.openOptionsPage();
       sendResponse({ success: true });
